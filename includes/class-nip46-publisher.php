@@ -507,6 +507,43 @@ class Nostr_NIP46_Publisher {
      * Cron: publish the oldest backfill post, then schedule the next tick.
      */
     public function backfill_tick() {
+        // Cron and the admin page pump can both call this; one at a time.
+        $lock = 'nostr_nip46_backfill_lock';
+        if (get_transient($lock)) {
+            return;
+        }
+        set_transient($lock, 1, 2 * Nostr_NIP46_Client::RPC_TIMEOUT + 60);
+        try {
+            $this->backfill_tick_unlocked();
+        } finally {
+            delete_transient($lock);
+        }
+    }
+
+    /**
+     * Run the next backfill step now if it is due. Called by the admin
+     * progress poll so the queue keeps moving on hosts where WP-Cron only
+     * runs every few minutes (e.g. server cron with DISABLE_WP_CRON).
+     */
+    public function backfill_pump() {
+        $state = get_option(self::BACKFILL_STATE_OPTION, array());
+        if (!is_array($state) || empty($state['running'])) {
+            return;
+        }
+        $next = wp_next_scheduled(self::BACKFILL_HOOK);
+        if ($next && $next > time()) {
+            return;
+        }
+        wp_clear_scheduled_hook(self::BACKFILL_HOOK);
+        $this->backfill_tick();
+        // If another runner held the lock, make sure a tick stays scheduled.
+        $state = get_option(self::BACKFILL_STATE_OPTION, array());
+        if (is_array($state) && !empty($state['running']) && !wp_next_scheduled(self::BACKFILL_HOOK)) {
+            wp_schedule_single_event(time() + self::BACKFILL_INTERVAL, self::BACKFILL_HOOK);
+        }
+    }
+
+    private function backfill_tick_unlocked() {
         $remaining = $this->backfill_remaining_ids();
         $state = get_option(self::BACKFILL_STATE_OPTION, array());
         $state = is_array($state) ? $state : array();
@@ -552,6 +589,7 @@ class Nostr_NIP46_Publisher {
         update_option(self::BACKFILL_STATE_OPTION, $state, false);
 
         if ($state['running']) {
+            wp_clear_scheduled_hook(self::BACKFILL_HOOK);
             wp_schedule_single_event(time() + self::BACKFILL_INTERVAL, self::BACKFILL_HOOK);
         }
     }

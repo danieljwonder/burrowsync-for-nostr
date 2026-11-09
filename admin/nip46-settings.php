@@ -74,7 +74,7 @@ class Nostr_NIP46_Admin {
         <div class="nostr-card nostr-card-full" id="nostr-backfill-card">
             <h2><?php _e('Backfill to Nostr', 'burrowsync-for-nostr'); ?></h2>
             <p class="description">
-                <?php _e('Publish posts and notes that never reached Nostr, for example while your bunker was offline. Each event keeps the original publish date, so it lands in your Nostr history instead of appearing as new. Posts go out one at a time, about every 30 seconds. Content that came from Nostr, posts with Nostr sync turned off, and anything already on Nostr are skipped.', 'burrowsync-for-nostr'); ?>
+                <?php _e('Publish posts and notes that never reached Nostr, for example while your bunker was offline. Each event keeps the original publish date, so it lands in your Nostr history instead of appearing as new. Posts go out one at a time, about every 30 seconds while this page is open (slower in the background if your host runs WordPress cron infrequently). Content that came from Nostr, posts with Nostr sync turned off, and anything already on Nostr are skipped.', 'burrowsync-for-nostr'); ?>
             </p>
             <p>
                 <?php if ($last): ?>
@@ -194,6 +194,11 @@ class Nostr_NIP46_Admin {
         check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        // Keep the queue moving while this page is open, even if WP-Cron
+        // runs rarely on this host.
+        if ($this->settings->is_bunker_active()) {
+            Nostr_NIP46_Publisher::get_instance()->backfill_pump();
         }
         $st = Nostr_NIP46_Publisher::get_instance()->backfill_state();
         if (empty($st['started'])) {
