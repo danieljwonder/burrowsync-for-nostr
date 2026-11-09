@@ -39,7 +39,15 @@ class Nostr_Note_Embeds {
      */
     public static function is_enabled() {
         $options = get_option('nostr_for_wp_options', array());
-        return !isset($options['embed_inline_urls']) || !empty($options['embed_inline_urls']);
+        $enabled = !isset($options['embed_inline_urls']) || !empty($options['embed_inline_urls']);
+
+        /**
+         * Whether this plugin appends inline embeds to notes. Themes that
+         * render their own embed cards (e.g. Wonder Burrow) return false.
+         *
+         * @param bool $enabled Setting value.
+         */
+        return (bool) apply_filters('nfw_note_embeds_enabled', $enabled);
     }
 
     /**
@@ -140,7 +148,11 @@ class Nostr_Note_Embeds {
      * @return bool
      */
     private function is_oembeddable($url) {
-        return (bool) wp_oembed_get_provider($url);
+        if (!function_exists('_wp_oembed_get_object')) {
+            return false;
+        }
+        // Registered providers only; no discovery request at render time.
+        return (bool) _wp_oembed_get_object()->get_provider($url, array('discover' => false));
     }
 
     /**
