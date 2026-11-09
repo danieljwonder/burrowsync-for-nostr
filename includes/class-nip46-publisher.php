@@ -193,21 +193,21 @@ class Nostr_NIP46_Publisher {
         $post_id = intval($post_id);
         $post = get_post($post_id);
         if (!$post || $post->post_status !== 'publish') {
-            return array('success' => false, 'message' => __('Post is not published.', 'nostr-for-wp'));
+            return array('success' => false, 'message' => __('Post is not published.', 'burrowsync-for-nostr'));
         }
 
         if ($this->is_already_published($post_id)) {
-            return array('success' => true, 'message' => __('Already published to Nostr.', 'nostr-for-wp'));
+            return array('success' => true, 'message' => __('Already published to Nostr.', 'burrowsync-for-nostr'));
         }
 
         if (!$this->settings->is_bunker_active()) {
-            return array('success' => false, 'message' => __('Bunker signing is not configured.', 'nostr-for-wp'));
+            return array('success' => false, 'message' => __('Bunker signing is not configured.', 'burrowsync-for-nostr'));
         }
 
         // Concurrency guard: cron and a manual retry could race.
         $lock_key = 'nostr_nip46_lock_' . $post_id;
         if (get_transient($lock_key)) {
-            return array('success' => false, 'message' => __('A publish attempt is already in progress.', 'nostr-for-wp'));
+            return array('success' => false, 'message' => __('A publish attempt is already in progress.', 'burrowsync-for-nostr'));
         }
         set_transient($lock_key, 1, 2 * Nostr_NIP46_Client::RPC_TIMEOUT + 30);
 
@@ -224,11 +224,11 @@ class Nostr_NIP46_Publisher {
             }
 
             if (!$accepted) {
-                throw new Exception(__('No relay accepted the event.', 'nostr-for-wp'));
+                throw new Exception(__('No relay accepted the event.', 'burrowsync-for-nostr'));
             }
 
             $this->mark_published($post_id, $signed['id']);
-            return array('success' => true, 'message' => __('Published to Nostr.', 'nostr-for-wp'));
+            return array('success' => true, 'message' => __('Published to Nostr.', 'burrowsync-for-nostr'));
 
         } catch (Nostr_NIP46_Auth_Required_Exception $e) {
             $message = $e->getMessage() . ' ' . $e->auth_url;
@@ -275,7 +275,7 @@ class Nostr_NIP46_Publisher {
             $event = $content_mapper->post_to_nostr_event($post->ID);
         }
         if (!$event) {
-            throw new Exception(__('Could not build a Nostr event for this post (is sync enabled?).', 'nostr-for-wp'));
+            throw new Exception(__('Could not build a Nostr event for this post (is sync enabled?).', 'burrowsync-for-nostr'));
         }
         // Match the NIP-07 signing flow, which stamps the signing time.
         $event['created_at'] = time();
@@ -349,12 +349,12 @@ class Nostr_NIP46_Publisher {
         check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
 
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('Insufficient permissions', 'nostr-for-wp'));
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
         }
 
         $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
         if (!$post_id || !get_post($post_id)) {
-            wp_send_json_error(__('Invalid post ID', 'nostr-for-wp'));
+            wp_send_json_error(__('Invalid post ID', 'burrowsync-for-nostr'));
         }
 
         // Manual retry resets the give-up window.

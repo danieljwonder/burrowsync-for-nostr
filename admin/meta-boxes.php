@@ -50,7 +50,7 @@ class Nostr_Admin_Meta_Boxes {
         // Add to posts and notes
         add_meta_box(
             'nostr-sync',
-            __('Nostr Sync', 'nostr-for-wp'),
+            __('Nostr Sync', 'burrowsync-for-nostr'),
             array($this, 'render_sync_meta_box'),
             array('post', 'note'),
             'side',
@@ -78,40 +78,40 @@ class Nostr_Admin_Meta_Boxes {
             <p>
                 <label>
                     <input type="checkbox" name="nostr_sync_enabled" value="1" <?php checked($sync_enabled, '1'); ?>>
-                    <?php _e('Sync with Nostr', 'nostr-for-wp'); ?>
+                    <?php _e('Sync with Nostr', 'burrowsync-for-nostr'); ?>
                 </label>
             </p>
             
             <?php if ($event_id): ?>
                 <p>
-                    <strong><?php _e('Event ID:', 'nostr-for-wp'); ?></strong><br>
+                    <strong><?php _e('Event ID:', 'burrowsync-for-nostr'); ?></strong><br>
                     <code style="font-size: 11px; word-break: break-all;"><?php echo esc_html($event_id); ?></code>
                 </p>
             <?php endif; ?>
             
             <?php if ($synced_at): ?>
                 <p>
-                    <strong><?php _e('Last Synced:', 'nostr-for-wp'); ?></strong><br>
+                    <strong><?php _e('Last Synced:', 'burrowsync-for-nostr'); ?></strong><br>
                     <?php echo esc_html($synced_at); ?>
                 </p>
             <?php endif; ?>
             
             <p>
-                <strong><?php _e('Status:', 'nostr-for-wp'); ?></strong>
+                <strong><?php _e('Status:', 'burrowsync-for-nostr'); ?></strong>
                 <span id="nostr-sync-status" class="nostr-sync-status nostr-sync-status-<?php echo esc_attr($sync_status ?: 'pending'); ?>">
                     <?php
                     switch ($sync_status) {
                         case 'synced':
-                            echo '<span class="dashicons dashicons-yes-alt" style="color: green;"></span> ' . __('Synced', 'nostr-for-wp');
+                            echo '<span class="dashicons dashicons-yes-alt" style="color: green;"></span> ' . __('Synced', 'burrowsync-for-nostr');
                             break;
                         case 'failed':
-                            echo '<span class="dashicons dashicons-dismiss" style="color: red;"></span> ' . __('Failed', 'nostr-for-wp');
+                            echo '<span class="dashicons dashicons-dismiss" style="color: red;"></span> ' . __('Failed', 'burrowsync-for-nostr');
                             break;
                         case 'error':
-                            echo '<span class="dashicons dashicons-warning" style="color: orange;"></span> ' . __('Error', 'nostr-for-wp');
+                            echo '<span class="dashicons dashicons-warning" style="color: orange;"></span> ' . __('Error', 'burrowsync-for-nostr');
                             break;
                         default:
-                            echo '<span class="dashicons dashicons-clock" style="color: gray;"></span> ' . __('Pending', 'nostr-for-wp');
+                            echo '<span class="dashicons dashicons-clock" style="color: gray;"></span> ' . __('Pending', 'burrowsync-for-nostr');
                     }
                     ?>
                 </span>
@@ -119,10 +119,10 @@ class Nostr_Admin_Meta_Boxes {
             
             <p>
                 <button type="button" class="button button-primary" id="nostr-manual-sync" data-post-id="<?php echo $post->ID; ?>">
-                    <?php _e('Sync Now', 'nostr-for-wp'); ?>
+                    <?php _e('Sync Now', 'burrowsync-for-nostr'); ?>
                 </button>
                 <button type="button" class="button" id="nostr-refresh-status" data-post-id="<?php echo $post->ID; ?>">
-                    <?php _e('Refresh Status', 'nostr-for-wp'); ?>
+                    <?php _e('Refresh Status', 'burrowsync-for-nostr'); ?>
                 </button>
             </p>
             

@@ -12,7 +12,7 @@
     "notes",
     "social"
   ],
-  "textdomain": "nostr-for-wp",
+  "textdomain": "burrowsync-for-nostr",
   "attributes": {
     "limit": {
       "type": "number",

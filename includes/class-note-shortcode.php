@@ -148,7 +148,7 @@ class Nostr_Note_Shortcode {
         $notes_query = new WP_Query($args);
         
         if (!$notes_query->have_posts()) {
-            return '<p>' . esc_html__('No notes found.', 'nostr-for-wp') . '</p>';
+            return '<p>' . esc_html__('No notes found.', 'burrowsync-for-nostr') . '</p>';
         }
         
         $extra_class = !empty($atts['class']) ? ' ' . esc_attr($atts['class']) : '';

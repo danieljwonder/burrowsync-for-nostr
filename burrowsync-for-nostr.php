@@ -1,12 +1,15 @@
 <?php
 /**
- * Plugin Name: Nostr for WP
- * Plugin URI: https://github.com/danieljwonder/nostr-for-wp
- * Description: Two-way synchronization between WordPress content and Nostr protocol. Supports kind 1 notes and kind 30023 long-form content with NIP-07 browser extension or NIP-46 remote signer (bunker) signing, and NIP-05 domain identity verification.
- * Version: 1.4.0
+ * Plugin Name: BurrowSync for Nostr
+ * Plugin URI: https://burrowsync.com
+ * Description: Part of the BurrowSync family. Two-way synchronization between WordPress content and Nostr protocol. Supports kind 1 notes and kind 30023 long-form content with NIP-07 browser extension or NIP-46 remote signer (bunker) signing, and NIP-05 domain identity verification.
+ * Version: 0.9.0
  * Author: Daniel Wonder
+ * Author URI: https://burrowsync.com
+ * Requires at least: 5.9
+ * Requires PHP: 7.4
  * License: GPL v2 or later
- * Text Domain: nostr-for-wp
+ * Text Domain: burrowsync-for-nostr
  * Domain Path: /languages
  */
 
@@ -15,8 +18,28 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/*
+ * BurrowSync for Nostr replaces the Nostr for WP plugin and shares its data
+ * (options, post meta, the note post type). Both define the same classes, so
+ * they must never load together. If Nostr for WP is active, or already loaded,
+ * stand down and ask the admin to deactivate it. Settings carry over unchanged.
+ */
+if (
+    defined('NOSTR_FOR_WP_VERSION')
+    || in_array('nostr-for-wp/nostr-for-wp.php', (array) get_option('active_plugins', array()), true)
+    || (is_multisite() && array_key_exists('nostr-for-wp/nostr-for-wp.php', (array) get_site_option('active_sitewide_plugins', array())))
+) {
+    add_action('admin_notices', function () {
+        if (!current_user_can('activate_plugins')) {
+            return;
+        }
+        echo '<div class="notice notice-warning"><p><strong>BurrowSync for Nostr</strong> replaces Nostr for WP. Deactivate Nostr for WP to finish switching. Your settings, notes and sync history carry over.</p></div>';
+    });
+    return;
+}
+
 // Define plugin constants
-define('NOSTR_FOR_WP_VERSION', '1.4.0');
+define('NOSTR_FOR_WP_VERSION', '0.9.0');
 define('NOSTR_FOR_WP_PLUGIN_FILE', __FILE__);
 define('NOSTR_FOR_WP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('NOSTR_FOR_WP_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -78,6 +101,7 @@ class Nostr_For_WP {
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
         
         add_action('init', array($this, 'init'));
+        add_action('admin_init', array($this, 'maybe_finish_setup'));
         add_action('admin_init', array($this, 'admin_init'));
         add_action('admin_menu', array($this, 'admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
@@ -118,7 +142,7 @@ class Nostr_For_WP {
      */
     public function init() {
         // Load text domain
-        load_plugin_textdomain('nostr-for-wp', false, dirname(plugin_basename(__FILE__)) . '/languages');
+        load_plugin_textdomain('burrowsync-for-nostr', false, dirname(plugin_basename(__FILE__)) . '/languages');
         
         // Register custom post type
         $this->register_post_types();
@@ -156,8 +180,8 @@ class Nostr_For_WP {
      */
     public function admin_menu() {
         add_options_page(
-            __('Nostr Settings', 'nostr-for-wp'),
-            __('Nostr for WP', 'nostr-for-wp'),
+            __('Nostr Settings', 'burrowsync-for-nostr'),
+            __('BurrowSync for Nostr', 'burrowsync-for-nostr'),
             'manage_options',
             'nostr-for-wp',
             array('Nostr_Admin_Settings', 'render_settings_page')
@@ -184,45 +208,45 @@ class Nostr_For_WP {
                 'nonce' => wp_create_nonce('nostr_for_wp_admin_nonce'),
                 'relays' => get_user_meta(get_current_user_id(), 'nostr_relays', true) ?: array(),
                 'strings' => array(
-                    'nip07NotAvailable' => __('NIP-07 browser extension not detected', 'nostr-for-wp'),
-                    'syncSuccess' => __('Sync completed successfully', 'nostr-for-wp'),
-                    'syncError' => __('Sync failed', 'nostr-for-wp'),
-                    'connecting' => __('Connecting...', 'nostr-for-wp'),
-                    'test' => __('Test', 'nostr-for-wp'),
-                    'remove' => __('Remove', 'nostr-for-wp'),
-                    'addRelay' => __('Add Relay', 'nostr-for-wp'),
-                    'saveRelays' => __('Save Relays', 'nostr-for-wp'),
-                    'testing' => __('Testing...', 'nostr-for-wp'),
-                    'saving' => __('Saving...', 'nostr-for-wp'),
-                    'relaysSaved' => __('Relays saved successfully', 'nostr-for-wp'),
-                    'relaysSaveFailed' => __('Failed to save relays', 'nostr-for-wp'),
-                    'relayUrlRequired' => __('Please enter a relay URL', 'nostr-for-wp'),
-                    'extensionAvailable' => __('NIP-07 extension detected', 'nostr-for-wp'),
-                    'extensionNotAvailable' => __('NIP-07 extension not detected', 'nostr-for-wp'),
-                    'connectionSuccess' => __('Connected successfully', 'nostr-for-wp'),
-                    'connectionFailed' => __('Connection failed', 'nostr-for-wp'),
-                    'disconnectConfirm' => __('Are you sure you want to disconnect?', 'nostr-for-wp'),
-                    'disconnectFailed' => __('Failed to disconnect', 'nostr-for-wp'),
-                    'connect' => __('Connect with NIP-07', 'nostr-for-wp'),
-                    'disconnect' => __('Disconnect', 'nostr-for-wp'),
-                    'forceSync' => __('Sync Latest Notes', 'nostr-for-wp'),
-                    'testAllRelays' => __('Test All Relays', 'nostr-for-wp'),
-                    'syncing' => __('Syncing...', 'nostr-for-wp'),
-                    'syncNow' => __('Sync Now', 'nostr-for-wp'),
-                    'refreshStatus' => __('Refresh Status', 'nostr-for-wp'),
-                    'refreshing' => __('Refreshing...', 'nostr-for-wp'),
-                    'synced' => __('Synced', 'nostr-for-wp'),
-                    'failed' => __('Failed', 'nostr-for-wp'),
-                    'error' => __('Error', 'nostr-for-wp'),
-                    'pending' => __('Pending', 'nostr-for-wp'),
-                    'statusRefreshed' => __('Status refreshed', 'nostr-for-wp'),
-                    'statusRefreshFailed' => __('Failed to refresh status', 'nostr-for-wp'),
-                    'statusRefreshRequestFailed' => __('Status refresh request failed', 'nostr-for-wp'),
-                    'invalidPostId' => __('Invalid post ID', 'nostr-for-wp'),
-                    'syncRequestFailed' => __('Sync request failed', 'nostr-for-wp'),
-                    'unknownError' => __('Unknown error', 'nostr-for-wp'),
-                    'syncSuccess' => __('Sync completed successfully', 'nostr-for-wp'),
-                    'syncError' => __('Sync failed', 'nostr-for-wp')
+                    'nip07NotAvailable' => __('NIP-07 browser extension not detected', 'burrowsync-for-nostr'),
+                    'syncSuccess' => __('Sync completed successfully', 'burrowsync-for-nostr'),
+                    'syncError' => __('Sync failed', 'burrowsync-for-nostr'),
+                    'connecting' => __('Connecting...', 'burrowsync-for-nostr'),
+                    'test' => __('Test', 'burrowsync-for-nostr'),
+                    'remove' => __('Remove', 'burrowsync-for-nostr'),
+                    'addRelay' => __('Add Relay', 'burrowsync-for-nostr'),
+                    'saveRelays' => __('Save Relays', 'burrowsync-for-nostr'),
+                    'testing' => __('Testing...', 'burrowsync-for-nostr'),
+                    'saving' => __('Saving...', 'burrowsync-for-nostr'),
+                    'relaysSaved' => __('Relays saved successfully', 'burrowsync-for-nostr'),
+                    'relaysSaveFailed' => __('Failed to save relays', 'burrowsync-for-nostr'),
+                    'relayUrlRequired' => __('Please enter a relay URL', 'burrowsync-for-nostr'),
+                    'extensionAvailable' => __('NIP-07 extension detected', 'burrowsync-for-nostr'),
+                    'extensionNotAvailable' => __('NIP-07 extension not detected', 'burrowsync-for-nostr'),
+                    'connectionSuccess' => __('Connected successfully', 'burrowsync-for-nostr'),
+                    'connectionFailed' => __('Connection failed', 'burrowsync-for-nostr'),
+                    'disconnectConfirm' => __('Are you sure you want to disconnect?', 'burrowsync-for-nostr'),
+                    'disconnectFailed' => __('Failed to disconnect', 'burrowsync-for-nostr'),
+                    'connect' => __('Connect with NIP-07', 'burrowsync-for-nostr'),
+                    'disconnect' => __('Disconnect', 'burrowsync-for-nostr'),
+                    'forceSync' => __('Sync Latest Notes', 'burrowsync-for-nostr'),
+                    'testAllRelays' => __('Test All Relays', 'burrowsync-for-nostr'),
+                    'syncing' => __('Syncing...', 'burrowsync-for-nostr'),
+                    'syncNow' => __('Sync Now', 'burrowsync-for-nostr'),
+                    'refreshStatus' => __('Refresh Status', 'burrowsync-for-nostr'),
+                    'refreshing' => __('Refreshing...', 'burrowsync-for-nostr'),
+                    'synced' => __('Synced', 'burrowsync-for-nostr'),
+                    'failed' => __('Failed', 'burrowsync-for-nostr'),
+                    'error' => __('Error', 'burrowsync-for-nostr'),
+                    'pending' => __('Pending', 'burrowsync-for-nostr'),
+                    'statusRefreshed' => __('Status refreshed', 'burrowsync-for-nostr'),
+                    'statusRefreshFailed' => __('Failed to refresh status', 'burrowsync-for-nostr'),
+                    'statusRefreshRequestFailed' => __('Status refresh request failed', 'burrowsync-for-nostr'),
+                    'invalidPostId' => __('Invalid post ID', 'burrowsync-for-nostr'),
+                    'syncRequestFailed' => __('Sync request failed', 'burrowsync-for-nostr'),
+                    'unknownError' => __('Unknown error', 'burrowsync-for-nostr'),
+                    'syncSuccess' => __('Sync completed successfully', 'burrowsync-for-nostr'),
+                    'syncError' => __('Sync failed', 'burrowsync-for-nostr')
                 )
             ));
         }
@@ -243,16 +267,16 @@ class Nostr_For_WP {
                 'nonce' => wp_create_nonce('nostr_for_wp_admin_nonce'),
                 'relays' => get_user_meta(get_current_user_id(), 'nostr_relays', true) ?: array(),
                 'strings' => array(
-                    'syncing' => __('Syncing...', 'nostr-for-wp'),
-                    'syncNow' => __('Sync Now', 'nostr-for-wp'),
-                    'refreshing' => __('Refreshing...', 'nostr-for-wp'),
-                    'refreshStatus' => __('Refresh Status', 'nostr-for-wp'),
-                    'synced' => __('Synced', 'nostr-for-wp'),
-                    'failed' => __('Failed', 'nostr-for-wp'),
-                    'pending' => __('Pending', 'nostr-for-wp'),
-                    'statusRefreshed' => __('Status refreshed', 'nostr-for-wp'),
-                    'statusRefreshFailed' => __('Failed to refresh status', 'nostr-for-wp'),
-                    'statusRefreshRequestFailed' => __('Status refresh request failed', 'nostr-for-wp')
+                    'syncing' => __('Syncing...', 'burrowsync-for-nostr'),
+                    'syncNow' => __('Sync Now', 'burrowsync-for-nostr'),
+                    'refreshing' => __('Refreshing...', 'burrowsync-for-nostr'),
+                    'refreshStatus' => __('Refresh Status', 'burrowsync-for-nostr'),
+                    'synced' => __('Synced', 'burrowsync-for-nostr'),
+                    'failed' => __('Failed', 'burrowsync-for-nostr'),
+                    'pending' => __('Pending', 'burrowsync-for-nostr'),
+                    'statusRefreshed' => __('Status refreshed', 'burrowsync-for-nostr'),
+                    'statusRefreshFailed' => __('Failed to refresh status', 'burrowsync-for-nostr'),
+                    'statusRefreshRequestFailed' => __('Status refresh request failed', 'burrowsync-for-nostr')
                 )
             ));
         }
@@ -308,17 +332,17 @@ class Nostr_For_WP {
         // Register Notes post type for kind 1 events
         register_post_type('note', array(
             'labels' => array(
-                'name' => __('Notes', 'nostr-for-wp'),
-                'singular_name' => __('Note', 'nostr-for-wp'),
-                'menu_name' => __('Notes', 'nostr-for-wp'),
-                'add_new' => __('Add New Note', 'nostr-for-wp'),
-                'add_new_item' => __('Add New Note', 'nostr-for-wp'),
-                'edit_item' => __('Edit Note', 'nostr-for-wp'),
-                'new_item' => __('New Note', 'nostr-for-wp'),
-                'view_item' => __('View Note', 'nostr-for-wp'),
-                'search_items' => __('Search Notes', 'nostr-for-wp'),
-                'not_found' => __('No notes found', 'nostr-for-wp'),
-                'not_found_in_trash' => __('No notes found in trash', 'nostr-for-wp')
+                'name' => __('Notes', 'burrowsync-for-nostr'),
+                'singular_name' => __('Note', 'burrowsync-for-nostr'),
+                'menu_name' => __('Notes', 'burrowsync-for-nostr'),
+                'add_new' => __('Add New Note', 'burrowsync-for-nostr'),
+                'add_new_item' => __('Add New Note', 'burrowsync-for-nostr'),
+                'edit_item' => __('Edit Note', 'burrowsync-for-nostr'),
+                'new_item' => __('New Note', 'burrowsync-for-nostr'),
+                'view_item' => __('View Note', 'burrowsync-for-nostr'),
+                'search_items' => __('Search Notes', 'burrowsync-for-nostr'),
+                'not_found' => __('No notes found', 'burrowsync-for-nostr'),
+                'not_found_in_trash' => __('No notes found in trash', 'burrowsync-for-nostr')
             ),
             'public' => true,
             'publicly_queryable' => true,
@@ -366,8 +390,21 @@ class Nostr_For_WP {
         // Schedule cron job using the cron handler (which will check auto_sync_enabled)
         $cron_handler = Nostr_Cron_Handler::get_instance();
         $cron_handler->schedule_cron();
+
+        update_option('burrowsync_for_nostr_setup_version', NOSTR_FOR_WP_VERSION);
     }
     
+    /**
+     * Run activation setup once per version if it never ran, e.g. when this
+     * plugin was activated while Nostr for WP was still active and stood down.
+     */
+    public function maybe_finish_setup() {
+        if (get_option('burrowsync_for_nostr_setup_version') === NOSTR_FOR_WP_VERSION) {
+            return;
+        }
+        $this->activate();
+    }
+
     /**
      * Plugin deactivation
      */

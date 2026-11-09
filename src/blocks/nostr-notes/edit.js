@@ -37,9 +37,9 @@ export default function Edit( { attributes, setAttributes } ) {
 	return (
 		<div { ...blockProps }>
 			<InspectorControls>
-				<PanelBody title={ __( 'Note Settings', 'nostr-for-wp' ) }>
+				<PanelBody title={ __( 'Note Settings', 'burrowsync-for-nostr' ) }>
 					<RangeControl
-						label={ __( 'Number of Notes', 'nostr-for-wp' ) }
+						label={ __( 'Number of Notes', 'burrowsync-for-nostr' ) }
 						value={ limit }
 						onChange={ ( value ) =>
 							setAttributes( { limit: value } )
@@ -48,19 +48,19 @@ export default function Edit( { attributes, setAttributes } ) {
 						max={ 50 }
 					/>
 					<SelectControl
-						label={ __( 'Order By', 'nostr-for-wp' ) }
+						label={ __( 'Order By', 'burrowsync-for-nostr' ) }
 						value={ orderby }
 						options={ [
 							{
-								label: __( 'Date', 'nostr-for-wp' ),
+								label: __( 'Date', 'burrowsync-for-nostr' ),
 								value: 'date',
 							},
 							{
-								label: __( 'Title', 'nostr-for-wp' ),
+								label: __( 'Title', 'burrowsync-for-nostr' ),
 								value: 'title',
 							},
 							{
-								label: __( 'Modified', 'nostr-for-wp' ),
+								label: __( 'Modified', 'burrowsync-for-nostr' ),
 								value: 'modified',
 							},
 						] }
@@ -69,15 +69,15 @@ export default function Edit( { attributes, setAttributes } ) {
 						}
 					/>
 					<SelectControl
-						label={ __( 'Order', 'nostr-for-wp' ) }
+						label={ __( 'Order', 'burrowsync-for-nostr' ) }
 						value={ order }
 						options={ [
 							{
-								label: __( 'Descending', 'nostr-for-wp' ),
+								label: __( 'Descending', 'burrowsync-for-nostr' ),
 								value: 'DESC',
 							},
 							{
-								label: __( 'Ascending', 'nostr-for-wp' ),
+								label: __( 'Ascending', 'burrowsync-for-nostr' ),
 								value: 'ASC',
 							},
 						] }
@@ -88,10 +88,10 @@ export default function Edit( { attributes, setAttributes } ) {
 				</PanelBody>
 			</InspectorControls>
 			<div className="nostr-notes-block-placeholder">
-				<p>{ __( 'Nostr Notes', 'nostr-for-wp' ) }</p>
+				<p>{ __( 'Nostr Notes', 'burrowsync-for-nostr' ) }</p>
 				<p className="description">
-					{ __( 'Displaying', 'nostr-for-wp' ) } { limit }{ ' ' }
-					{ __( 'notes', 'nostr-for-wp' ) }
+					{ __( 'Displaying', 'burrowsync-for-nostr' ) } { limit }{ ' ' }
+					{ __( 'notes', 'burrowsync-for-nostr' ) }
 				</p>
 			</div>
 		</div>

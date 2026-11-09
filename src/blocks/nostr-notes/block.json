@@ -8,7 +8,7 @@
 	"icon": "format-chat",
 	"description": "Display a list of Nostr notes.",
 	"keywords": [ "nostr", "notes", "social" ],
-	"textdomain": "nostr-for-wp",
+	"textdomain": "burrowsync-for-nostr",
 	"attributes": {
 		"limit": {
 			"type": "number",

@@ -1,4 +1,8 @@
-# Nostr for WordPress
+# BurrowSync for Nostr
+
+> **Beta.** Pre-1.0. It runs in production, but test it on a staging site before relying on it.
+
+Part of [BurrowSync](https://burrowsync.com): WordPress plugins that sync your site with X, Farcaster and Nostr. Previously released as **Nostr for WP**. Switching over: activate BurrowSync for Nostr, then deactivate Nostr for WP. Settings carry over.
 
 Two-way synchronization between WordPress content and Nostr protocol. Supports standard kind 1 notes and kind 30023 long-form content with NIP-07 browser extension or NIP-46 remote signer (bunker) signing.
 

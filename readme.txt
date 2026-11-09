@@ -1,10 +1,10 @@
-=== Nostr for WordPress ===
+=== BurrowSync for Nostr ===
 Contributors: danielwonder
-Tags: nostr, social, sync, blockchain, decentralized
-Requires at least: 5.0
+Tags: nostr, sync, social, notes, burrowsync
+Requires at least: 5.9
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 0.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,7 +12,11 @@ Two-way synchronization between WordPress content and Nostr protocol. Supports k
 
 == Description ==
 
-Nostr for WordPress enables seamless two-way synchronization between your WordPress site and the Nostr protocol. Share your WordPress content on Nostr and publish Nostr content to your WordPress site.
+**Beta.** BurrowSync for Nostr is pre-1.0. It runs in production, but test it on a staging site before relying on it.
+
+BurrowSync for Nostr syncs your WordPress site with Nostr, both ways. Publish on your site and it goes out to Nostr. Publish from any Nostr client and it lands on your site. It is part of the [BurrowSync](https://burrowsync.com) family, alongside BurrowSync for X and BurrowSync for Farcaster. Each plugin works on its own and they share the same `note` post type.
+
+Previously released as Nostr for WP. See the Upgrade Notice for switching over.
 
 **Key Features:**
 
@@ -140,6 +144,13 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 
 == Changelog ==
 
+= 0.9.0 =
+* Renamed from Nostr for WP to BurrowSync for Nostr and joined the BurrowSync family
+* Versioning restarts below 1.0 while the family is in public beta. Features match Nostr for WP 1.4.0
+* Stands down with an admin notice if Nostr for WP is still active, so the two never run at once
+* Settings, notes, sync history and NIP-46 bunker connections carry over unchanged
+* Release zip now bundles the Composer dependencies NIP-46 needs
+
 = 1.4.0 =
 * Added NIP-46 remote signer (bunker) support as a second signing method — the server can now sign outbound kind 1 and kind 30023 events via a bunker (nak bunker, nsec.app, Amber, ...)
 * Scheduled posts now publish to Nostr automatically in bunker mode, no browser required
@@ -181,6 +192,9 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 * Admin interface for settings and management
 
 == Upgrade Notice ==
+
+= 0.9.0 =
+Switching from Nostr for WP: install and activate BurrowSync for Nostr, then deactivate Nostr for WP. Your settings carry over. Deleting Nostr for WP afterwards is safe; it does not remove any data.
 
 = 1.4.0 =
 Adds NIP-46 remote signer (bunker) support for server-side signing and scheduled posts. Fully optional and off by default — existing NIP-07 setups are unaffected.

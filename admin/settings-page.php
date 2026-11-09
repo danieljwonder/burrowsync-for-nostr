@@ -111,31 +111,31 @@ class Nostr_Admin_Settings {
         
         ?>
         <div class="wrap">
-            <h1><?php _e('Nostr Settings', 'nostr-for-wp'); ?></h1>
+            <h1><?php _e('Nostr Settings', 'burrowsync-for-nostr'); ?></h1>
             
             <div id="nostr-admin-messages"></div>
             
             <div class="nostr-admin-container">
                 <!-- Connection Status -->
                 <div class="nostr-card">
-                    <h2><?php _e('Nostr Connection', 'nostr-for-wp'); ?></h2>
+                    <h2><?php _e('Nostr Connection', 'burrowsync-for-nostr'); ?></h2>
                     
                     <div id="nostr-connection-status">
                         <?php if ($connection_status['connected']): ?>
                             <div class="nostr-status connected">
                                 <span class="dashicons dashicons-yes-alt"></span>
-                                <strong><?php _e('Connected', 'nostr-for-wp'); ?></strong>
-                                <p><?php printf(__('Site Public Key: %s', 'nostr-for-wp'), substr($connection_status['public_key'], 0, 16) . '...'); ?></p>
-                                <p class="description"><?php _e('This is your site\'s Nostr identity. All content synced to and from Nostr uses this key.', 'nostr-for-wp'); ?></p>
-                                <button type="button" class="button" id="nostr-disconnect"><?php _e('Disconnect', 'nostr-for-wp'); ?></button>
+                                <strong><?php _e('Connected', 'burrowsync-for-nostr'); ?></strong>
+                                <p><?php printf(__('Site Public Key: %s', 'burrowsync-for-nostr'), substr($connection_status['public_key'], 0, 16) . '...'); ?></p>
+                                <p class="description"><?php _e('This is your site\'s Nostr identity. All content synced to and from Nostr uses this key.', 'burrowsync-for-nostr'); ?></p>
+                                <button type="button" class="button" id="nostr-disconnect"><?php _e('Disconnect', 'burrowsync-for-nostr'); ?></button>
                             </div>
                         <?php else: ?>
                             <div class="nostr-status disconnected">
                                 <span class="dashicons dashicons-warning"></span>
-                                <strong><?php _e('Not Connected', 'nostr-for-wp'); ?></strong>
-                                <p><?php _e('Connect your Nostr account to enable synchronization.', 'nostr-for-wp'); ?></p>
-                                <p class="description"><?php _e('You need a NIP-07 compatible browser extension (like Alby or nos2x) to connect.', 'nostr-for-wp'); ?></p>
-                                <button type="button" class="button button-primary" id="nostr-connect"><?php _e('Connect with NIP-07', 'nostr-for-wp'); ?></button>
+                                <strong><?php _e('Not Connected', 'burrowsync-for-nostr'); ?></strong>
+                                <p><?php _e('Connect your Nostr account to enable synchronization.', 'burrowsync-for-nostr'); ?></p>
+                                <p class="description"><?php _e('You need a NIP-07 compatible browser extension (like Alby or nos2x) to connect.', 'burrowsync-for-nostr'); ?></p>
+                                <button type="button" class="button button-primary" id="nostr-connect"><?php _e('Connect with NIP-07', 'burrowsync-for-nostr'); ?></button>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -148,20 +148,20 @@ class Nostr_Admin_Settings {
                 
                 <!-- Relay Configuration -->
                 <div class="nostr-card">
-                    <h2><?php _e('Relay Configuration', 'nostr-for-wp'); ?></h2>
-                    <p class="description"><?php _e('Configure your Nostr relays. The test button checks basic connectivity to the relay host/port.', 'nostr-for-wp'); ?></p>
+                    <h2><?php _e('Relay Configuration', 'burrowsync-for-nostr'); ?></h2>
+                    <p class="description"><?php _e('Configure your Nostr relays. The test button checks basic connectivity to the relay host/port.', 'burrowsync-for-nostr'); ?></p>
                     
                     <form id="nostr-relays-form">
                         <table class="form-table">
                             <tr>
-                                <th scope="row"><?php _e('Relays', 'nostr-for-wp'); ?></th>
+                                <th scope="row"><?php _e('Relays', 'burrowsync-for-nostr'); ?></th>
                                 <td>
                                     <div id="nostr-relays-list">
                                         <?php foreach ($connection_status['relays'] as $index => $relay): ?>
                                             <div class="nostr-relay-item">
                                                 <input type="url" name="relays[]" value="<?php echo esc_attr($relay); ?>" class="regular-text" placeholder="wss://relay.example.com">
-                                                <button type="button" class="button nostr-test-relay" data-relay="<?php echo esc_attr($relay); ?>"><?php _e('Test', 'nostr-for-wp'); ?></button>
-                                                <button type="button" class="button nostr-remove-relay"><?php _e('Remove', 'nostr-for-wp'); ?></button>
+                                                <button type="button" class="button nostr-test-relay" data-relay="<?php echo esc_attr($relay); ?>"><?php _e('Test', 'burrowsync-for-nostr'); ?></button>
+                                                <button type="button" class="button nostr-remove-relay"><?php _e('Remove', 'burrowsync-for-nostr'); ?></button>
                                                 <span class="nostr-relay-status" data-relay="<?php echo esc_attr($relay); ?>">
                                                     <?php if (isset($connection_status['relay_status'][$relay]) && $connection_status['relay_status'][$relay]): ?>
                                                         <span class="dashicons dashicons-yes-alt" style="color: green;" title="Relay is working"></span>
@@ -170,10 +170,10 @@ class Nostr_Admin_Settings {
                                             </div>
                                         <?php endforeach; ?>
                                     </div>
-                                    <button type="button" class="button" id="nostr-add-relay"><?php _e('Add Relay', 'nostr-for-wp'); ?></button>
-                                    <button type="button" class="button button-primary" id="nostr-save-relays"><?php _e('Save Relays', 'nostr-for-wp'); ?></button>
+                                    <button type="button" class="button" id="nostr-add-relay"><?php _e('Add Relay', 'burrowsync-for-nostr'); ?></button>
+                                    <button type="button" class="button button-primary" id="nostr-save-relays"><?php _e('Save Relays', 'burrowsync-for-nostr'); ?></button>
                                     <p class="description" style="margin-top: 10px; font-style: italic;">
-                                        <?php _e('Note: The test checks basic TCP connectivity to the relay host/port. Real WebSocket connections will be tested during actual sync operations.', 'nostr-for-wp'); ?>
+                                        <?php _e('Note: The test checks basic TCP connectivity to the relay host/port. Real WebSocket connections will be tested during actual sync operations.', 'burrowsync-for-nostr'); ?>
                                     </p>
                                 </td>
                             </tr>
@@ -183,25 +183,25 @@ class Nostr_Admin_Settings {
                 
                 <!-- Sync Settings -->
                 <div class="nostr-card">
-                    <h2><?php _e('Sync Settings', 'nostr-for-wp'); ?></h2>
+                    <h2><?php _e('Sync Settings', 'burrowsync-for-nostr'); ?></h2>
                     
                     <form method="post" action="options.php">
                         <?php settings_fields('nostr_for_wp_settings'); ?>
                         
                         <table class="form-table">
                             <tr>
-                                <th scope="row"><?php _e('Sync Interval', 'nostr-for-wp'); ?></th>
+                                <th scope="row"><?php _e('Sync Interval', 'burrowsync-for-nostr'); ?></th>
                                 <td>
                                     <input type="number" name="nostr_for_wp_options[sync_interval]" value="<?php echo esc_attr(get_option('nostr_for_wp_options')['sync_interval'] ?? 300); ?>" min="60" max="3600" step="60">
-                                    <p class="description"><?php _e('How often to check for updates from Nostr (in seconds). Minimum: 60 seconds.', 'nostr-for-wp'); ?></p>
+                                    <p class="description"><?php _e('How often to check for updates from Nostr (in seconds). Minimum: 60 seconds.', 'burrowsync-for-nostr'); ?></p>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><?php _e('Auto Sync', 'nostr-for-wp'); ?></th>
+                                <th scope="row"><?php _e('Auto Sync', 'burrowsync-for-nostr'); ?></th>
                                 <td>
                                     <label>
                                         <input type="checkbox" name="nostr_for_wp_options[auto_sync_enabled]" value="1" <?php checked(get_option('nostr_for_wp_options')['auto_sync_enabled'] ?? true); ?>>
-                                        <?php _e('Enable automatic synchronization', 'nostr-for-wp'); ?>
+                                        <?php _e('Enable automatic synchronization', 'burrowsync-for-nostr'); ?>
                                     </label>
                                 </td>
                             </tr>
@@ -213,8 +213,8 @@ class Nostr_Admin_Settings {
 
                 <!-- Display Settings -->
                 <div class="nostr-card">
-                    <h2><?php _e('Display Settings', 'nostr-for-wp'); ?></h2>
-                    <p class="description"><?php _e('Control how synced notes render on the public site.', 'nostr-for-wp'); ?></p>
+                    <h2><?php _e('Display Settings', 'burrowsync-for-nostr'); ?></h2>
+                    <p class="description"><?php _e('Control how synced notes render on the public site.', 'burrowsync-for-nostr'); ?></p>
 
                     <form method="post" action="options.php">
                         <?php settings_fields('nostr_for_wp_settings'); ?>
@@ -222,23 +222,23 @@ class Nostr_Admin_Settings {
 
                         <table class="form-table">
                             <tr>
-                                <th scope="row"><?php _e('Inline URL embeds', 'nostr-for-wp'); ?></th>
+                                <th scope="row"><?php _e('Inline URL embeds', 'burrowsync-for-nostr'); ?></th>
                                 <td>
                                     <label>
                                         <input type="checkbox" name="nostr_for_wp_options[embed_inline_urls]" value="1" <?php checked(get_option('nostr_for_wp_options')['embed_inline_urls'] ?? true); ?>>
-                                        <?php _e('Append embed cards for inline URLs in notes (Twitter/X, YouTube, and other oEmbed providers)', 'nostr-for-wp'); ?>
+                                        <?php _e('Append embed cards for inline URLs in notes (Twitter/X, YouTube, and other oEmbed providers)', 'burrowsync-for-nostr'); ?>
                                     </label>
-                                    <p class="description"><?php _e('Stored note content is never modified; embeds are added at render time only.', 'nostr-for-wp'); ?></p>
+                                    <p class="description"><?php _e('Stored note content is never modified; embeds are added at render time only.', 'burrowsync-for-nostr'); ?></p>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><?php _e('Note provenance', 'nostr-for-wp'); ?></th>
+                                <th scope="row"><?php _e('Note provenance', 'burrowsync-for-nostr'); ?></th>
                                 <td>
                                     <label>
                                         <input type="checkbox" name="nostr_for_wp_options[show_note_provenance]" value="1" <?php checked(get_option('nostr_for_wp_options')['show_note_provenance'] ?? true); ?>>
-                                        <?php _e('Show timestamp and Nostr event ID beneath note content on single note pages', 'nostr-for-wp'); ?>
+                                        <?php _e('Show timestamp and Nostr event ID beneath note content on single note pages', 'burrowsync-for-nostr'); ?>
                                     </label>
-                                    <p class="description"><?php _e('Event metadata remains available via REST and post meta when disabled.', 'nostr-for-wp'); ?></p>
+                                    <p class="description"><?php _e('Event metadata remains available via REST and post meta when disabled.', 'burrowsync-for-nostr'); ?></p>
                                 </td>
                             </tr>
                         </table>
@@ -257,76 +257,76 @@ class Nostr_Admin_Settings {
                 $site_pubkey   = $connection_status['connected'] ? $connection_status['public_key'] : '';
                 ?>
                 <div class="nostr-card nostr-card-full">
-                    <h2><?php _e('NIP-05 Identity', 'nostr-for-wp'); ?></h2>
+                    <h2><?php _e('NIP-05 Identity', 'burrowsync-for-nostr'); ?></h2>
                     <p class="description">
-                        <?php _e('NIP-05 lets people verify your Nostr identity via your domain (e.g. <code>you@yourdomain.com</code>). This creates a real <code>.well-known/nostr.json</code> file on your server.', 'nostr-for-wp'); ?>
+                        <?php _e('NIP-05 lets people verify your Nostr identity via your domain (e.g. <code>you@yourdomain.com</code>). This creates a real <code>.well-known/nostr.json</code> file on your server.', 'burrowsync-for-nostr'); ?>
                     </p>
 
                     <div class="nostr-nip05-status" style="margin-bottom:15px;">
                         <?php if ($nip05_exists): ?>
                             <span class="dashicons dashicons-yes-alt" style="color:green;vertical-align:middle;"></span>
-                            <strong><?php _e('File exists:', 'nostr-for-wp'); ?></strong>
+                            <strong><?php _e('File exists:', 'burrowsync-for-nostr'); ?></strong>
                             <code><?php echo esc_html(str_replace(ABSPATH, '/', $nip05_file)); ?></code>
                         <?php else: ?>
                             <span class="dashicons dashicons-minus" style="color:#999;vertical-align:middle;"></span>
-                            <strong><?php _e('File does not exist yet.', 'nostr-for-wp'); ?></strong>
+                            <strong><?php _e('File does not exist yet.', 'burrowsync-for-nostr'); ?></strong>
                         <?php endif; ?>
                         &nbsp;
                         <?php if ($nip05_writable): ?>
-                            <span style="color:green;"><?php _e('(writable)', 'nostr-for-wp'); ?></span>
+                            <span style="color:green;"><?php _e('(writable)', 'burrowsync-for-nostr'); ?></span>
                         <?php else: ?>
-                            <span style="color:red;"><?php _e('(not writable — check server permissions)', 'nostr-for-wp'); ?></span>
+                            <span style="color:red;"><?php _e('(not writable — check server permissions)', 'burrowsync-for-nostr'); ?></span>
                         <?php endif; ?>
                     </div>
 
                     <table class="form-table" style="margin-bottom:0;">
                         <tr>
-                            <th scope="row"><?php _e('Identifiers', 'nostr-for-wp'); ?></th>
+                            <th scope="row"><?php _e('Identifiers', 'burrowsync-for-nostr'); ?></th>
                             <td>
                                 <div id="nip05-names-list">
                                     <?php if (!empty($nip05_data['names'])): ?>
                                         <?php foreach ($nip05_data['names'] as $name => $pubkey): ?>
                                         <div class="nip05-row">
-                                            <input type="text"  class="nip05-name"   value="<?php echo esc_attr($name); ?>"   placeholder="<?php esc_attr_e('name (e.g. _ or alice)', 'nostr-for-wp'); ?>" style="width:160px;">
+                                            <input type="text"  class="nip05-name"   value="<?php echo esc_attr($name); ?>"   placeholder="<?php esc_attr_e('name (e.g. _ or alice)', 'burrowsync-for-nostr'); ?>" style="width:160px;">
                                             <span style="padding:0 6px;line-height:30px;">→</span>
-                                            <input type="text"  class="nip05-pubkey" value="<?php echo esc_attr($pubkey); ?>" placeholder="<?php esc_attr_e('64-char hex pubkey', 'nostr-for-wp'); ?>" style="width:480px;font-family:monospace;">
+                                            <input type="text"  class="nip05-pubkey" value="<?php echo esc_attr($pubkey); ?>" placeholder="<?php esc_attr_e('64-char hex pubkey', 'burrowsync-for-nostr'); ?>" style="width:480px;font-family:monospace;">
                                             <?php if ($site_pubkey && $pubkey !== $site_pubkey): ?>
                                             <?php endif; ?>
-                                            <button type="button" class="button nip05-remove-row"><?php _e('Remove', 'nostr-for-wp'); ?></button>
+                                            <button type="button" class="button nip05-remove-row"><?php _e('Remove', 'burrowsync-for-nostr'); ?></button>
                                         </div>
                                         <?php endforeach; ?>
                                     <?php else: ?>
                                         <div class="nip05-row">
-                                            <input type="text"  class="nip05-name"   value="" placeholder="<?php esc_attr_e('name (e.g. _ or alice)', 'nostr-for-wp'); ?>" style="width:160px;">
+                                            <input type="text"  class="nip05-name"   value="" placeholder="<?php esc_attr_e('name (e.g. _ or alice)', 'burrowsync-for-nostr'); ?>" style="width:160px;">
                                             <span style="padding:0 6px;line-height:30px;">→</span>
-                                            <input type="text"  class="nip05-pubkey" value="" placeholder="<?php esc_attr_e('64-char hex pubkey', 'nostr-for-wp'); ?>" style="width:480px;font-family:monospace;">
-                                            <button type="button" class="button nip05-remove-row"><?php _e('Remove', 'nostr-for-wp'); ?></button>
+                                            <input type="text"  class="nip05-pubkey" value="" placeholder="<?php esc_attr_e('64-char hex pubkey', 'burrowsync-for-nostr'); ?>" style="width:480px;font-family:monospace;">
+                                            <button type="button" class="button nip05-remove-row"><?php _e('Remove', 'burrowsync-for-nostr'); ?></button>
                                         </div>
                                     <?php endif; ?>
                                 </div>
 
                                 <p style="margin-top:10px;">
-                                    <button type="button" class="button" id="nip05-add-row"><?php _e('+ Add Identifier', 'nostr-for-wp'); ?></button>
+                                    <button type="button" class="button" id="nip05-add-row"><?php _e('+ Add Identifier', 'burrowsync-for-nostr'); ?></button>
                                     <?php if ($site_pubkey): ?>
-                                    <button type="button" class="button" id="nip05-use-site-key" data-pubkey="<?php echo esc_attr($site_pubkey); ?>"><?php _e('Use Connected Site Key', 'nostr-for-wp'); ?></button>
+                                    <button type="button" class="button" id="nip05-use-site-key" data-pubkey="<?php echo esc_attr($site_pubkey); ?>"><?php _e('Use Connected Site Key', 'burrowsync-for-nostr'); ?></button>
                                     <?php endif; ?>
                                 </p>
 
                                 <p class="description">
-                                    <?php _e('Use <code>_</code> as the name to make your identity <code>you@yourdomain.com</code> (root domain identifier).', 'nostr-for-wp'); ?>
+                                    <?php _e('Use <code>_</code> as the name to make your identity <code>you@yourdomain.com</code> (root domain identifier).', 'burrowsync-for-nostr'); ?>
                                 </p>
                             </td>
                         </tr>
                     </table>
 
                     <p style="margin-top:15px;">
-                        <button type="button" class="button button-primary" id="nip05-save"><?php _e('Save nostr.json', 'nostr-for-wp'); ?></button>
+                        <button type="button" class="button button-primary" id="nip05-save"><?php _e('Save nostr.json', 'burrowsync-for-nostr'); ?></button>
                         <span id="nip05-save-status" style="margin-left:10px;"></span>
                     </p>
 
                     <?php if ($nip05_exists && !empty($nip05_data['names'])): ?>
                     <div style="margin-top:15px;">
-                        <strong><?php _e('Current file preview:', 'nostr-for-wp'); ?></strong>
+                        <strong><?php _e('Current file preview:', 'burrowsync-for-nostr'); ?></strong>
                         <pre style="background:#f6f7f7;border:1px solid #ddd;padding:10px;margin-top:5px;overflow:auto;font-size:12px;"><?php echo esc_html(json_encode(array('names' => $nip05_data['names']), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
                     </div>
                     <?php endif; ?>
@@ -334,25 +334,25 @@ class Nostr_Admin_Settings {
 
                 <!-- Sync Status -->
                 <div class="nostr-card">
-                    <h2><?php _e('Sync Status', 'nostr-for-wp'); ?></h2>
+                    <h2><?php _e('Sync Status', 'burrowsync-for-nostr'); ?></h2>
                     
                     <div class="nostr-sync-stats">
-                        <p><strong><?php _e('Connected Users:', 'nostr-for-wp'); ?></strong> <?php echo $sync_stats['connected_users']; ?></p>
-                        <p><strong><?php _e('Last Sync:', 'nostr-for-wp'); ?></strong> <?php echo $sync_stats['last_sync'] ? date('Y-m-d H:i:s', strtotime($sync_stats['last_sync'])) : __('Never', 'nostr-for-wp'); ?></p>
-                        <p><strong><?php _e('Next Sync:', 'nostr-for-wp'); ?></strong> <?php echo $cron_status['next_run'] ? date('Y-m-d H:i:s', strtotime($cron_status['next_run'])) : __('Not scheduled', 'nostr-for-wp'); ?></p>
-                        <p><strong><?php _e('Cron Status:', 'nostr-for-wp'); ?></strong> 
+                        <p><strong><?php _e('Connected Users:', 'burrowsync-for-nostr'); ?></strong> <?php echo $sync_stats['connected_users']; ?></p>
+                        <p><strong><?php _e('Last Sync:', 'burrowsync-for-nostr'); ?></strong> <?php echo $sync_stats['last_sync'] ? date('Y-m-d H:i:s', strtotime($sync_stats['last_sync'])) : __('Never', 'burrowsync-for-nostr'); ?></p>
+                        <p><strong><?php _e('Next Sync:', 'burrowsync-for-nostr'); ?></strong> <?php echo $cron_status['next_run'] ? date('Y-m-d H:i:s', strtotime($cron_status['next_run'])) : __('Not scheduled', 'burrowsync-for-nostr'); ?></p>
+                        <p><strong><?php _e('Cron Status:', 'burrowsync-for-nostr'); ?></strong> 
                             <?php if ($cron_status['scheduled']): ?>
-                                <span style="color: green;"><?php _e('Active', 'nostr-for-wp'); ?></span>
+                                <span style="color: green;"><?php _e('Active', 'burrowsync-for-nostr'); ?></span>
                             <?php else: ?>
-                                <span style="color: red;"><?php _e('Inactive', 'nostr-for-wp'); ?></span>
+                                <span style="color: red;"><?php _e('Inactive', 'burrowsync-for-nostr'); ?></span>
                             <?php endif; ?>
                         </p>
                     </div>
                     
                     <p>
-                        <button type="button" class="button" id="nostr-force-sync"><?php _e('Sync Latest Notes', 'nostr-for-wp'); ?></button>
-                        <button type="button" class="button button-secondary" id="nostr-force-full-resync"><?php _e('Sync All Notes', 'nostr-for-wp'); ?></button>
-                        <button type="button" class="button" id="nostr-test-all-relays"><?php _e('Test All Relays', 'nostr-for-wp'); ?></button>
+                        <button type="button" class="button" id="nostr-force-sync"><?php _e('Sync Latest Notes', 'burrowsync-for-nostr'); ?></button>
+                        <button type="button" class="button button-secondary" id="nostr-force-full-resync"><?php _e('Sync All Notes', 'burrowsync-for-nostr'); ?></button>
+                        <button type="button" class="button" id="nostr-test-all-relays"><?php _e('Test All Relays', 'burrowsync-for-nostr'); ?></button>
                     </p>
                     
                 </div>
@@ -432,10 +432,10 @@ class Nostr_Admin_Settings {
 
             function addNip05Row(name, pubkey) {
                 var row = $('<div class="nip05-row">' +
-                    '<input type="text" class="nip05-name" placeholder="<?php esc_attr_e('name (e.g. _ or alice)', 'nostr-for-wp'); ?>" style="width:160px;">' +
+                    '<input type="text" class="nip05-name" placeholder="<?php esc_attr_e('name (e.g. _ or alice)', 'burrowsync-for-nostr'); ?>" style="width:160px;">' +
                     '<span style="padding:0 6px;line-height:30px;">→</span>' +
-                    '<input type="text" class="nip05-pubkey" placeholder="<?php esc_attr_e('64-char hex pubkey', 'nostr-for-wp'); ?>" style="width:480px;font-family:monospace;">' +
-                    '<button type="button" class="button nip05-remove-row"><?php esc_html_e('Remove', 'nostr-for-wp'); ?></button>' +
+                    '<input type="text" class="nip05-pubkey" placeholder="<?php esc_attr_e('64-char hex pubkey', 'burrowsync-for-nostr'); ?>" style="width:480px;font-family:monospace;">' +
+                    '<button type="button" class="button nip05-remove-row"><?php esc_html_e('Remove', 'burrowsync-for-nostr'); ?></button>' +
                     '</div>');
                 if (name)   row.find('.nip05-name').val(name);
                 if (pubkey) row.find('.nip05-pubkey').val(pubkey);
@@ -483,7 +483,7 @@ class Nostr_Admin_Settings {
                 });
 
                 $btn.prop('disabled', true);
-                $status.text('<?php esc_html_e('Saving...', 'nostr-for-wp'); ?>').css('color', '');
+                $status.text('<?php esc_html_e('Saving...', 'burrowsync-for-nostr'); ?>').css('color', '');
 
                 $.post(ajaxurl, {
                     action:       'nostr_save_nip05',
@@ -499,7 +499,7 @@ class Nostr_Admin_Settings {
                         $status.text(response.data).css('color', 'red');
                     }
                 }).fail(function() {
-                    $status.text('<?php esc_html_e('Request failed. Please try again.', 'nostr-for-wp'); ?>').css('color', 'red');
+                    $status.text('<?php esc_html_e('Request failed. Please try again.', 'burrowsync-for-nostr'); ?>').css('color', 'red');
                 }).always(function() {
                     $btn.prop('disabled', false);
                 });

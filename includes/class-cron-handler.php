@@ -96,7 +96,7 @@ class Nostr_Cron_Handler {
         
         $schedules['nostr_poll_interval'] = array(
             'interval' => $interval,
-            'display' => sprintf(__('Every %d seconds', 'nostr-for-wp'), $interval)
+            'display' => sprintf(__('Every %d seconds', 'burrowsync-for-nostr'), $interval)
         );
         
         return $schedules;

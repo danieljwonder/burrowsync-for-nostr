@@ -1,5 +1,5 @@
 {
-    "name": "danieljwonder/nostr-for-wp",
+    "name": "danieljwonder/burrowsync-for-nostr",
     "description": "Two-way synchronization between WordPress content and Nostr protocol.",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",

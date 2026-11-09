@@ -1,6 +1,6 @@
 {
-  "name": "nostr-for-wp",
-  "version": "1.4.0",
+  "name": "burrowsync-for-nostr",
+  "version": "0.9.0",
   "description": "Two-way synchronization between WordPress content and Nostr protocol",
   "author": "Daniel Wonder",
   "license": "GPL-2.0-or-later",

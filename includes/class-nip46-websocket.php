@@ -104,7 +104,7 @@ class Nostr_NIP46_WebSocket {
             . "Connection: Upgrade\r\n"
             . "Sec-WebSocket-Key: {$key}\r\n"
             . "Sec-WebSocket-Version: 13\r\n"
-            . "User-Agent: nostr-for-wp/" . NOSTR_FOR_WP_VERSION . "\r\n"
+            . "User-Agent: burrowsync-for-nostr/" . NOSTR_FOR_WP_VERSION . "\r\n"
             . "\r\n";
 
         if (fwrite($this->socket, $request) === false) {
