@@ -52,7 +52,169 @@ class Nostr_NIP46_Admin {
             add_action('manage_note_posts_custom_column', array($this, 'render_status_column'), 10, 2);
             add_action('add_meta_boxes', array($this, 'add_meta_box'));
             add_action('admin_footer-edit.php', array($this, 'print_retry_script'));
+            add_action('nostr_for_wp_settings_cards', array($this, 'render_backfill_card'), 20);
         }
+
+        add_action('wp_ajax_nostr_nip46_backfill_preview', array($this, 'backfill_preview_ajax'));
+        add_action('wp_ajax_nostr_nip46_backfill_start', array($this, 'backfill_start_ajax'));
+        add_action('wp_ajax_nostr_nip46_backfill_cancel', array($this, 'backfill_cancel_ajax'));
+        add_action('wp_ajax_nostr_nip46_backfill_status', array($this, 'backfill_status_ajax'));
+    }
+
+    /* ---------------------------------------------------------------------
+     * Backfill card (bunker mode only)
+     * ------------------------------------------------------------------ */
+
+    public function render_backfill_card() {
+        $publisher = Nostr_NIP46_Publisher::get_instance();
+        $last = $publisher->last_published_time();
+        $default_since = $last ? $last : time() - 90 * DAY_IN_SECONDS;
+        $local = wp_date('Y-m-d\\TH:i', $default_since);
+        ?>
+        <div class="nostr-card nostr-card-full" id="nostr-backfill-card">
+            <h2><?php _e('Backfill to Nostr', 'burrowsync-for-nostr'); ?></h2>
+            <p class="description">
+                <?php _e('Publish posts and notes that never reached Nostr, for example while your bunker was offline. Each event keeps the original publish date, so it lands in your Nostr history instead of appearing as new. Posts go out one at a time, about every 30 seconds. Content that came from Nostr, posts with Nostr sync turned off, and anything already on Nostr are skipped.', 'burrowsync-for-nostr'); ?>
+            </p>
+            <p>
+                <?php if ($last): ?>
+                    <?php printf(esc_html__('Last post that reached Nostr: %s', 'burrowsync-for-nostr'), '<strong>' . esc_html(wp_date(get_option('date_format') . ' ' . get_option('time_format'), $last)) . '</strong>'); ?>
+                <?php else: ?>
+                    <?php _e('No post from this site has reached Nostr yet.', 'burrowsync-for-nostr'); ?>
+                <?php endif; ?>
+            </p>
+            <p>
+                <label for="nostr-backfill-since"><?php _e('Backfill posts published since', 'burrowsync-for-nostr'); ?></label>
+                <input type="datetime-local" id="nostr-backfill-since" value="<?php echo esc_attr($local); ?>" />
+                <button type="button" class="button" id="nostr-backfill-preview"><?php _e('Preview', 'burrowsync-for-nostr'); ?></button>
+            </p>
+            <div id="nostr-backfill-preview-result"></div>
+            <p>
+                <button type="button" class="button button-primary" id="nostr-backfill-start" disabled><?php _e('Start backfill', 'burrowsync-for-nostr'); ?></button>
+                <button type="button" class="button" id="nostr-backfill-cancel"><?php _e('Cancel backfill', 'burrowsync-for-nostr'); ?></button>
+            </p>
+            <p id="nostr-backfill-status" class="description"></p>
+        </div>
+        <script>
+        (function($) {
+            var nonce = <?php echo wp_json_encode(wp_create_nonce('nostr_for_wp_admin_nonce')); ?>;
+            function since() { return $('#nostr-backfill-since').val(); }
+            function status() {
+                $.post(ajaxurl, {action: 'nostr_nip46_backfill_status', nonce: nonce}, function(r) {
+                    if (r && r.success) { $('#nostr-backfill-status').text(r.data.text); if (r.data.running) { setTimeout(status, 10000); } }
+                });
+            }
+            $('#nostr-backfill-since').on('change', function() { $('#nostr-backfill-start').prop('disabled', true); });
+            $('#nostr-backfill-preview').on('click', function() {
+                $.post(ajaxurl, {action: 'nostr_nip46_backfill_preview', nonce: nonce, since: since()}, function(r) {
+                    if (!r || !r.success) { $('#nostr-backfill-preview-result').html('<p>' + (r && r.data ? $('<div>').text(r.data).html() : 'Preview failed') + '</p>'); return; }
+                    var d = r.data, html = '<p><strong>' + d.count + '</strong> ' + $('<div>').text(d.label).html() + '</p>';
+                    if (d.items.length) {
+                        html += '<ul style="max-height:200px;overflow:auto;list-style:disc;margin-left:20px;">';
+                        $.each(d.items, function(i, it) { html += '<li>' + $('<div>').text(it).html() + '</li>'; });
+                        html += '</ul>';
+                    }
+                    $('#nostr-backfill-preview-result').html(html);
+                    $('#nostr-backfill-start').prop('disabled', d.count === 0);
+                });
+            });
+            $('#nostr-backfill-start').on('click', function() {
+                if (!confirm('Publish these posts to Nostr with their original dates?')) { return; }
+                $(this).prop('disabled', true);
+                $.post(ajaxurl, {action: 'nostr_nip46_backfill_start', nonce: nonce, since: since()}, function(r) {
+                    $('#nostr-backfill-status').text(r && r.data ? (r.data.text || r.data) : 'Start failed');
+                    status();
+                });
+            });
+            $('#nostr-backfill-cancel').on('click', function() {
+                $.post(ajaxurl, {action: 'nostr_nip46_backfill_cancel', nonce: nonce}, function() { status(); });
+            });
+            status();
+        })(jQuery);
+        </script>
+        <?php
+    }
+
+    /** Parse the datetime-local field (site timezone) into a GMT timestamp. */
+    private function backfill_since_from_request() {
+        $raw = isset($_POST['since']) ? sanitize_text_field(wp_unslash($_POST['since'])) : '';
+        $dt = $raw !== '' ? date_create_immutable($raw, wp_timezone()) : false;
+        return $dt ? $dt->getTimestamp() : 0;
+    }
+
+    private function backfill_guard() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        if (!$this->settings->is_bunker_active()) {
+            wp_send_json_error(__('Connect a bunker (NIP-46) before backfilling.', 'burrowsync-for-nostr'));
+        }
+    }
+
+    public function backfill_preview_ajax() {
+        $this->backfill_guard();
+        $since = $this->backfill_since_from_request();
+        if (!$since) {
+            wp_send_json_error(__('Choose a start date.', 'burrowsync-for-nostr'));
+        }
+        $ids = Nostr_NIP46_Publisher::get_instance()->backfill_candidates($since);
+        $items = array();
+        foreach (array_slice($ids, 0, 200) as $id) {
+            $title = get_the_title($id);
+            if ($title === '') {
+                $title = wp_trim_words(wp_strip_all_tags(get_post_field('post_content', $id)), 12, '…');
+            }
+            $items[] = wp_date(get_option('date_format'), get_post_time('U', true, $id)) . ' · ' . get_post_type($id) . ' · ' . $title;
+        }
+        wp_send_json_success(array(
+            'count' => count($ids),
+            'label' => _n('post will be published to Nostr, oldest first:', 'posts will be published to Nostr, oldest first:', count($ids), 'burrowsync-for-nostr'),
+            'items' => $items,
+        ));
+    }
+
+    public function backfill_start_ajax() {
+        $this->backfill_guard();
+        $since = $this->backfill_since_from_request();
+        if (!$since) {
+            wp_send_json_error(__('Choose a start date.', 'burrowsync-for-nostr'));
+        }
+        $count = Nostr_NIP46_Publisher::get_instance()->start_backfill($since);
+        wp_send_json_success(array('text' => sprintf(_n('Backfill started: %d post queued.', 'Backfill started: %d posts queued.', $count, 'burrowsync-for-nostr'), $count)));
+    }
+
+    public function backfill_cancel_ajax() {
+        $this->backfill_guard();
+        Nostr_NIP46_Publisher::get_instance()->cancel_backfill();
+        wp_send_json_success();
+    }
+
+    public function backfill_status_ajax() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        $st = Nostr_NIP46_Publisher::get_instance()->backfill_state();
+        if (empty($st['started'])) {
+            wp_send_json_success(array('running' => false, 'text' => ''));
+        }
+        $text = sprintf(
+            /* translators: 1: published, 2: total, 3: failed, 4: remaining */
+            __('Backfill: %1$d of %2$d published, %3$d failed, %4$d remaining.', 'burrowsync-for-nostr'),
+            intval($st['published'] ?? 0), intval($st['total'] ?? 0), intval($st['failed'] ?? 0), intval($st['remaining'])
+        );
+        if (!empty($st['running'])) {
+            $text .= ' ' . __('Running…', 'burrowsync-for-nostr');
+        } elseif (!empty($st['cancelled'])) {
+            $text .= ' ' . __('Cancelled.', 'burrowsync-for-nostr');
+        } elseif (!empty($st['finished'])) {
+            $text .= ' ' . __('Finished.', 'burrowsync-for-nostr');
+        }
+        if (!empty($st['last_error']) && !empty($st['running'])) {
+            $text .= ' ' . sprintf(__('Last error: %s', 'burrowsync-for-nostr'), $st['last_error']);
+        }
+        wp_send_json_success(array('running' => !empty($st['running']), 'text' => $text));
     }
 
     /* ---------------------------------------------------------------------

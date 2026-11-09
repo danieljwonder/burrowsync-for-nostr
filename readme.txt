@@ -150,6 +150,8 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 * Stands down with an admin notice if Nostr for WP is still active, so the two never run at once
 * Settings, notes, sync history and NIP-46 bunker connections carry over unchanged
 * Release zip now bundles the Composer dependencies NIP-46 needs
+* Fixed a fatal error on notes containing a plain-text embeddable URL (e.g. an X post link)
+* New: Backfill to Nostr (bunker mode). Publishes posts and notes that never reached Nostr, keeping their original dates, one every 30 seconds
 
 = 1.4.0 =
 * Added NIP-46 remote signer (bunker) support as a second signing method — the server can now sign outbound kind 1 and kind 30023 events via a bunker (nak bunker, nsec.app, Amber, ...)

@@ -45,6 +45,14 @@ class Nostr_NIP46_Publisher {
      */
     const MAX_RETRY_WINDOW = DAY_IN_SECONDS;
 
+    /** Backfill: one post per tick, spaced to spare the bunker and relays. */
+    const BACKFILL_HOOK         = 'nostr_nip46_backfill_tick';
+    const BACKFILL_META         = '_nostr_nip46_backfill';
+    const BACKFILL_TRIES_META   = '_nostr_nip46_backfill_tries';
+    const BACKFILL_STATE_OPTION = 'nostr_nip46_backfill_state';
+    const BACKFILL_INTERVAL     = 30;
+    const BACKFILL_MAX_TRIES    = 3;
+
     /**
      * Single instance
      */
@@ -83,6 +91,9 @@ class Nostr_NIP46_Publisher {
 
         // Manual "Retry now" from the admin.
         add_action('wp_ajax_nostr_nip46_retry_post', array($this, 'retry_post_ajax'));
+
+        // Backfill of posts missed while the bunker was unreachable.
+        add_action(self::BACKFILL_HOOK, array($this, 'backfill_tick'));
     }
 
     /* ---------------------------------------------------------------------
@@ -277,8 +288,12 @@ class Nostr_NIP46_Publisher {
         if (!$event) {
             throw new Exception(__('Could not build a Nostr event for this post (is sync enabled?).', 'burrowsync-for-nostr'));
         }
-        // Match the NIP-07 signing flow, which stamps the signing time.
-        $event['created_at'] = time();
+        // Live publishes stamp the signing time, matching the NIP-07 flow.
+        // Backfilled posts keep their original publish time so they slot
+        // into history instead of flooding followers' feeds as new.
+        $event['created_at'] = get_post_meta($post->ID, self::BACKFILL_META, true)
+            ? (int) get_post_time('U', true, $post)
+            : time();
 
         $client = new Nostr_NIP46_Client($this->settings);
         $signed = $client->sign_event($event);
@@ -336,6 +351,209 @@ class Nostr_NIP46_Publisher {
         update_post_meta($post_id, '_nostr_sync_status', 'queued');
         $delay = isset(self::RETRY_SCHEDULE[$attempts - 1]) ? self::RETRY_SCHEDULE[$attempts - 1] : HOUR_IN_SECONDS;
         $this->schedule_attempt($post_id, time() + $delay);
+    }
+
+    /* ---------------------------------------------------------------------
+     * Backfill (keeps original dates)
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Published posts and notes since $since (GMT timestamp) that never
+     * reached Nostr. Excludes Nostr-origin content, posts with sync turned
+     * off, and anything already carrying a Nostr event.
+     *
+     * @param int $since
+     * @return int[] post IDs, oldest first
+     */
+    public function backfill_candidates($since) {
+        $ids = get_posts(array(
+            'post_type'        => array('post', 'note'),
+            'post_status'      => 'publish',
+            'posts_per_page'   => -1,
+            'fields'           => 'ids',
+            'orderby'          => 'date',
+            'order'            => 'ASC',
+            'suppress_filters' => true,
+            'date_query'       => array(array(
+                'column'    => 'post_date_gmt',
+                'after'     => gmdate('Y-m-d H:i:s', (int) $since),
+                'inclusive' => true,
+            )),
+        ));
+        $out = array();
+        foreach ($ids as $id) {
+            if (get_post_meta($id, '_nostr_origin', true)) {
+                continue;
+            }
+            if (get_post_meta($id, '_nostr_sync_enabled', true) === '0') {
+                continue;
+            }
+            if (get_post_meta($id, '_nostr_event_id', true) !== '' || $this->is_already_published($id)) {
+                continue;
+            }
+            $out[] = (int) $id;
+        }
+        return $out;
+    }
+
+    /**
+     * Publish time (GMT timestamp) of the newest local post or note that
+     * reached Nostr, ignoring content imported from Nostr. The default
+     * backfill start point. 0 when nothing has been published yet.
+     *
+     * @return int
+     */
+    public function last_published_time() {
+        $ids = get_posts(array(
+            'post_type'        => array('post', 'note'),
+            'post_status'      => 'publish',
+            'posts_per_page'   => 50,
+            'fields'           => 'ids',
+            'orderby'          => 'date',
+            'order'            => 'DESC',
+            'suppress_filters' => true,
+            'meta_query'       => array(
+                array('key' => '_nostr_event_id', 'value' => '', 'compare' => '!='),
+            ),
+        ));
+        foreach ($ids as $id) {
+            if (!get_post_meta($id, '_nostr_origin', true)) {
+                return (int) get_post_time('U', true, $id);
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Mark candidates for backfill and start the paced queue.
+     *
+     * @param int $since GMT timestamp
+     * @return int number of posts queued
+     */
+    public function start_backfill($since) {
+        $ids = $this->backfill_candidates($since);
+        foreach ($ids as $id) {
+            update_post_meta($id, self::BACKFILL_META, '1');
+            delete_post_meta($id, self::BACKFILL_TRIES_META);
+            // Hand the post to the backfill queue: drop any regular retry so
+            // nothing races it, and reset the give-up window.
+            wp_clear_scheduled_hook(self::CRON_HOOK, array($id));
+            delete_post_meta($id, '_nostr_nip46_first_failure');
+            delete_post_meta($id, '_nostr_nip46_attempts');
+            delete_post_meta($id, '_nostr_nip46_next_retry');
+            // A cached signature from a failed live attempt carries "now" as
+            // its date; re-sign with the original date instead.
+            delete_post_meta($id, '_nostr_nip46_signed_event');
+            update_post_meta($id, '_nostr_sync_status', 'queued');
+        }
+        update_option(self::BACKFILL_STATE_OPTION, array(
+            'started'   => time(),
+            'since'     => (int) $since,
+            'total'     => count($ids),
+            'published' => 0,
+            'failed'    => 0,
+            'running'   => !empty($ids),
+        ), false);
+        wp_clear_scheduled_hook(self::BACKFILL_HOOK);
+        if (!empty($ids)) {
+            wp_schedule_single_event(time(), self::BACKFILL_HOOK);
+            if (!defined('DOING_CRON') || !DOING_CRON) {
+                spawn_cron();
+            }
+        }
+        return count($ids);
+    }
+
+    /** Stop the backfill. Posts already published stay published. */
+    public function cancel_backfill() {
+        wp_clear_scheduled_hook(self::BACKFILL_HOOK);
+        foreach ($this->backfill_remaining_ids() as $id) {
+            delete_post_meta($id, self::BACKFILL_META);
+            delete_post_meta($id, self::BACKFILL_TRIES_META);
+            update_post_meta($id, '_nostr_sync_status', 'failed');
+        }
+        $state = get_option(self::BACKFILL_STATE_OPTION, array());
+        if (is_array($state)) {
+            $state['running'] = false;
+            $state['cancelled'] = time();
+            update_option(self::BACKFILL_STATE_OPTION, $state, false);
+        }
+    }
+
+    /** @return int[] posts still marked for backfill, oldest first */
+    public function backfill_remaining_ids() {
+        return array_map('intval', get_posts(array(
+            'post_type'        => array('post', 'note'),
+            'post_status'      => 'any',
+            'posts_per_page'   => -1,
+            'fields'           => 'ids',
+            'orderby'          => 'date',
+            'order'            => 'ASC',
+            'suppress_filters' => true,
+            'meta_key'         => self::BACKFILL_META,
+            'meta_value'       => '1',
+        )));
+    }
+
+    /** @return array backfill state plus remaining count */
+    public function backfill_state() {
+        $state = get_option(self::BACKFILL_STATE_OPTION, array());
+        $state = is_array($state) ? $state : array();
+        $state['remaining'] = count($this->backfill_remaining_ids());
+        return $state;
+    }
+
+    /**
+     * Cron: publish the oldest backfill post, then schedule the next tick.
+     */
+    public function backfill_tick() {
+        $remaining = $this->backfill_remaining_ids();
+        $state = get_option(self::BACKFILL_STATE_OPTION, array());
+        $state = is_array($state) ? $state : array();
+
+        if (empty($remaining)) {
+            $state['running'] = false;
+            $state['finished'] = time();
+            update_option(self::BACKFILL_STATE_OPTION, $state, false);
+            return;
+        }
+
+        $id = $remaining[0];
+        $post = get_post($id);
+        if (!$post || $post->post_status !== 'publish' || get_post_meta($id, '_nostr_origin', true)) {
+            delete_post_meta($id, self::BACKFILL_META);
+        } else {
+            $result = $this->process_post($id);
+            // process_post schedules its own backoff on failure; the backfill
+            // queue owns retries for these posts, so drop that.
+            wp_clear_scheduled_hook(self::CRON_HOOK, array($id));
+
+            if (!empty($result['success'])) {
+                delete_post_meta($id, self::BACKFILL_META);
+                delete_post_meta($id, self::BACKFILL_TRIES_META);
+                $state['published'] = intval($state['published'] ?? 0) + 1;
+            } else {
+                $tries = intval(get_post_meta($id, self::BACKFILL_TRIES_META, true)) + 1;
+                update_post_meta($id, self::BACKFILL_TRIES_META, $tries);
+                if ($tries >= self::BACKFILL_MAX_TRIES) {
+                    delete_post_meta($id, self::BACKFILL_META);
+                    delete_post_meta($id, self::BACKFILL_TRIES_META);
+                    update_post_meta($id, '_nostr_sync_status', 'failed');
+                    $state['failed'] = intval($state['failed'] ?? 0) + 1;
+                }
+                $state['last_error'] = isset($result['message']) ? sanitize_text_field($result['message']) : '';
+            }
+        }
+
+        $state['running'] = !empty($this->backfill_remaining_ids());
+        if (!$state['running']) {
+            $state['finished'] = time();
+        }
+        update_option(self::BACKFILL_STATE_OPTION, $state, false);
+
+        if ($state['running']) {
+            wp_schedule_single_event(time() + self::BACKFILL_INTERVAL, self::BACKFILL_HOOK);
+        }
     }
 
     /* ---------------------------------------------------------------------
