@@ -95,6 +95,7 @@ class Nostr_For_WP {
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-settings.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-client.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-publish-record.php';
+        require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-relay-retry.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-publisher.php';
         
         // Load admin classes
@@ -125,6 +126,7 @@ class Nostr_For_WP {
         Nostr_Note_Embeds::get_instance();
         Nostr_Note_Shortcode::get_instance();
         Nostr_NIP46_Publisher::get_instance();
+        Nostr_Relay_Retry::get_instance();
         
         // Register blocks
         add_action('init', array($this, 'register_blocks'), 20);
@@ -389,6 +391,7 @@ class Nostr_For_WP {
         // Clear any pending NIP-46 publish retries
         if (function_exists('wp_unschedule_hook')) {
             wp_unschedule_hook('nostr_nip46_process_post');
+            wp_unschedule_hook('nostr_relay_retry_sweep');
         }
         
         // Flush rewrite rules

@@ -110,13 +110,18 @@ class Nostr_Client {
     
     /**
      * Publish an event to relays
+     *
+     * @param array      $event       signed event
+     * @param int|null   $user_id     unused (single site identity)
+     * @param array|null $only_relays publish to just these relays instead
+     *                                of the whole list (used by retries)
      */
-    public function publish_event($event, $user_id = null) {
+    public function publish_event($event, $user_id = null, $only_relays = null) {
         if (!$user_id) {
             $user_id = get_current_user_id();
         }
         
-        $relays = $this->get_user_relays($user_id);
+        $relays = is_array($only_relays) ? $only_relays : $this->get_user_relays($user_id);
         $results = array();
         
         foreach ($relays as $relay_url) {
