@@ -16,12 +16,14 @@ Run `composer install` in the repo root first (the crypto tests need
 | `test-settings.php` | bunker URI parsing, secret encryption at rest, keypair persistence and reset |
 | `test-inbound-guard.php` | regression: posts created by inbound sync are **never** queued for outbound NIP-46 publishing (reproduces `wp_insert_post()` hook ordering; see ADR-6 in `docs/DECISIONS.md`) |
 | `test-publish-record.php` | the signed event is kept after a successful publish (byte-identical through `update_post_meta` unslashing), per-relay states (accepted / rejected / unreachable), attempt log and its cap, edit re-sign keeps the old id in the log, legacy retry key migration. Real publisher, local signing key, scripted relay replies (`offline-publish-stubs.php`) |
+| `test-relay-retry.php` | relay retry sweep: backoff (5 min, 15 min, 1 h, 6 h, daily), OK=false classification (restricted/blocked/auth/invalid/pow are final; rate-limited/error retry), only due non-accepted relays in the current list are retried, same event id every time (never re-signed), 7-day give-up, batch and lock limits, newly added relays adopted for posts from the last 30 days, relay health aggregation, cron-style `sweep('')` |
 
 ```bash
 php tests/test-crypto.php
 php tests/test-settings.php
 php tests/test-inbound-guard.php
 php tests/test-publish-record.php
+php tests/test-relay-retry.php
 ```
 
 Without native PHP: `/opt/data/tools/php-wasm/run-plugin-tests.sh <plugin-dir>` runs every

@@ -50,6 +50,48 @@ function wp_json_encode($data, $flags = 0) { return json_encode($data, $flags); 
 function sanitize_text_field($str) {
     return trim(preg_replace('/[\r\n\t ]+/', ' ', strip_tags((string) $str)));
 }
+/*
+ * get_posts() covering the queries the publisher and retry sweep make:
+ * post_type/status, meta_query (<=, NUMERIC), meta_key + EXISTS,
+ * date_query after (post_date_gmt), orderby meta_value_num / ID, paging.
+ */
+function get_posts($args) {
+    $types = isset($args['post_type']) ? (array) $args['post_type'] : array('post');
+    $ids = array();
+    foreach ($GLOBALS['__posts'] as $id => $p) {
+        if (!in_array($p->post_type, $types, true)) continue;
+        if (isset($args['post_status']) && $args['post_status'] !== 'any' && $p->post_status !== $args['post_status']) continue;
+        if (!empty($args['meta_query'])) {
+            $ok = true;
+            foreach ($args['meta_query'] as $q) {
+                $v = get_post_meta($id, $q['key'], true);
+                if ($v === '') { $ok = false; break; }
+                if (isset($q['compare']) && $q['compare'] === '<=' && !((float) $v <= (float) $q['value'])) { $ok = false; break; }
+            }
+            if (!$ok) continue;
+        }
+        if (isset($args['meta_compare']) && $args['meta_compare'] === 'EXISTS' && get_post_meta($id, $args['meta_key'], true) === '') continue;
+        if (isset($args['meta_value']) && get_post_meta($id, $args['meta_key'], true) !== $args['meta_value']) continue;
+        if (!empty($args['date_query'][0]['after'])) {
+            $gmt = isset($p->post_date_gmt) ? $p->post_date_gmt : gmdate('Y-m-d H:i:s');
+            if (strcmp($gmt, $args['date_query'][0]['after']) < 0) continue;
+        }
+        $ids[] = $id;
+    }
+    if (isset($args['orderby']) && $args['orderby'] === 'meta_value_num') {
+        usort($ids, function ($a, $b) use ($args) {
+            return (float) get_post_meta($a, $args['meta_key'], true) <=> (float) get_post_meta($b, $args['meta_key'], true);
+        });
+    } else {
+        sort($ids);
+    }
+    $per = isset($args['posts_per_page']) ? (int) $args['posts_per_page'] : 10;
+    if ($per > 0) {
+        $page = isset($args['paged']) ? max(1, (int) $args['paged']) : 1;
+        $ids = array_slice($ids, ($page - 1) * $per, $per);
+    }
+    return $ids;
+}
 function get_post($id) { return isset($GLOBALS['__posts'][$id]) ? $GLOBALS['__posts'][$id] : null; }
 function get_post_time($fmt, $gmt, $post) { return 1700000000; }
 function wp_is_post_autosave($id) { return false; }
