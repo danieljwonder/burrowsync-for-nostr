@@ -152,7 +152,8 @@ class Nostr_Client {
             // Connect to relay
             error_log('Nostr: Attempting to connect to relay ' . $relay_url);
             if (!$websocket->connect()) {
-                throw new Exception('Failed to connect to relay ' . $relay_url);
+                $why = method_exists($websocket, 'get_last_error') ? $websocket->get_last_error() : '';
+                throw new Exception('Failed to connect to relay ' . $relay_url . ($why !== '' ? ': ' . $why : ''));
             }
             error_log('Nostr: Successfully connected to relay ' . $relay_url);
             
@@ -175,10 +176,18 @@ class Nostr_Client {
                         $data = json_decode($response, true);
                         if (is_array($data) && count($data) >= 2) {
                             if ($data[0] === 'OK' && $data[1] === $event['id']) {
+                                // NIP-01: ["OK", <id>, <true|false>, <message>].
+                                // OK=false is a refusal (e.g. "restricted: pay
+                                // for access"), not a success.
                                 $websocket->close();
+                                $accepted = isset($data[2]) && $data[2] === true;
+                                $reason = isset($data[3]) && is_string($data[3]) ? $data[3] : '';
                                 return array(
-                                    'success' => true,
-                                    'response' => $data
+                                    'success'     => $accepted,
+                                    'ok_received' => true,
+                                    'message'     => $reason,
+                                    'error'       => $accepted ? '' : ($reason !== '' ? $reason : 'Relay refused the event'),
+                                    'response'    => $data
                                 );
                             } elseif ($data[0] === 'NOTICE') {
                                 $websocket->close();

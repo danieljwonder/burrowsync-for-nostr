@@ -25,6 +25,11 @@ class Nostr_WebSocket_Client {
      * Connection status
      */
     private $connected = false;
+
+    /**
+     * Why the last connect() failed (short, for status displays).
+     */
+    private $last_error = '';
     
     /**
      * Constructor
@@ -79,11 +84,21 @@ class Nostr_WebSocket_Client {
             
         } catch (Exception $e) {
             error_log('WebSocket connection failed: ' . $e->getMessage());
+            // Keep the first line only (e.g. "HTTP/1.1 503 Service Unavailable").
+            $first = strtok(str_replace("\r", '', $e->getMessage()), "\n");
+            $this->last_error = substr((string) $first, 0, 200);
             $this->connected = false;
             return false;
         }
     }
     
+    /**
+     * @return string reason the last connect() failed, or ''
+     */
+    public function get_last_error() {
+        return $this->last_error;
+    }
+
     /**
      * Perform WebSocket handshake
      */

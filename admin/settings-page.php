@@ -753,8 +753,11 @@ class Nostr_Admin_Settings {
             wp_die('Insufficient permissions');
         }
         
-        $event_json = sanitize_text_field($_POST['event']);
-        $event = json_decode($event_json, true);
+        // Not sanitize_text_field(): that strips tags and whitespace inside
+        // the content and so changes the signed event. The JSON is decoded
+        // and every field checked below instead.
+        $event_json = isset($_POST['event']) ? wp_unslash($_POST['event']) : '';
+        $event = is_string($event_json) ? json_decode($event_json, true) : null;
         
         error_log('Nostr: Received signed event: ' . json_encode($event));
         
@@ -774,6 +777,15 @@ class Nostr_Admin_Settings {
         $results = $nostr_client->publish_event($event);
         
         error_log('Nostr: Publish results: ' . json_encode($results));
+
+        // Keep the browser-signed event and the per-relay results when the
+        // caller says which post it belongs to and the event checks out.
+        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+        if ($post_id && get_post($post_id) && current_user_can('edit_post', $post_id)
+            && Nostr_Publish_Record::is_valid_event($event, true)) {
+            Nostr_Publish_Record::store_event($post_id, $event, 'nip07');
+            Nostr_Publish_Record::record_results($post_id, $event, $results, 'nip07');
+        }
         
         $success = false;
         foreach ($results as $result) {
@@ -900,6 +912,33 @@ class Nostr_Admin_Settings {
             wp_send_json_error('Invalid post ID');
         }
         
+        // Post editor flow: the browser published straight to the relays and
+        // sends the signed event plus what each relay said, so it can be kept.
+        $event = isset($_POST['event']) && is_string($_POST['event']) ? json_decode(wp_unslash($_POST['event']), true) : null;
+        if ($event && current_user_can('edit_post', $post_id) && Nostr_Publish_Record::is_valid_event($event, true)
+            && ($event_id === '' || $event_id === $event['id'])) {
+            $event_id = $event['id'];
+            Nostr_Publish_Record::store_event($post_id, $event, 'nip07');
+            $raw = isset($_POST['relay_results']) && is_string($_POST['relay_results']) ? json_decode(wp_unslash($_POST['relay_results']), true) : null;
+            if (is_array($raw)) {
+                $results = array();
+                foreach (array_slice($raw, 0, 50, true) as $url => $r) {
+                    if (!is_string($url) || !preg_match('#^wss?://#i', $url) || !is_array($r)) {
+                        continue;
+                    }
+                    $ok_received = isset($r['ok']) && is_bool($r['ok']);
+                    $results[$url] = array(
+                        'success'     => $ok_received && $r['ok'] === true,
+                        'ok_received' => $ok_received,
+                        'error'       => isset($r['message']) && is_string($r['message']) ? $r['message'] : '',
+                    );
+                }
+                if ($results) {
+                    Nostr_Publish_Record::record_results($post_id, $event, $results, 'nip07');
+                }
+            }
+        }
+
         update_post_meta($post_id, '_nostr_sync_pending', '0');
         update_post_meta($post_id, '_nostr_sync_status', 'synced');
         update_post_meta($post_id, '_nostr_synced_at', current_time('mysql'));

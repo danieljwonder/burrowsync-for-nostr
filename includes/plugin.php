@@ -94,6 +94,7 @@ class Nostr_For_WP {
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-websocket.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-settings.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-client.php';
+        require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-publish-record.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-publisher.php';
         
         // Load admin classes
@@ -101,6 +102,7 @@ class Nostr_For_WP {
             require_once NOSTR_FOR_WP_PLUGIN_DIR . 'admin/settings-page.php';
             require_once NOSTR_FOR_WP_PLUGIN_DIR . 'admin/meta-boxes.php';
             require_once NOSTR_FOR_WP_PLUGIN_DIR . 'admin/nip46-settings.php';
+            require_once NOSTR_FOR_WP_PLUGIN_DIR . 'admin/publish-record-admin.php';
         }
     }
     
@@ -131,6 +133,7 @@ class Nostr_For_WP {
             Nostr_Admin_Settings::get_instance();
             Nostr_Admin_Meta_Boxes::get_instance();
             Nostr_NIP46_Admin::get_instance();
+            Nostr_Publish_Record_Admin::get_instance();
         }
     }
     

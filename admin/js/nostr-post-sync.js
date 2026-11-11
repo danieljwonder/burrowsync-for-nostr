@@ -72,10 +72,49 @@
             return;
         }
         
+        // What each relay said, sent to WordPress so the signed event and
+        // the per-relay outcome are kept. ok: true/false = the relay's OK
+        // reply, null = no reply (connection error or timeout).
+        const relayResults = {};
         let successCount = 0;
         let completedCount = 0;
         
         showMessage('Publishing to ' + relays.length + ' relays...', 'info');
+        
+        function finishRelay(relay, ok, message) {
+            if (Object.prototype.hasOwnProperty.call(relayResults, relay)) {
+                return; // already counted
+            }
+            relayResults[relay] = { ok: ok, message: message || '' };
+            if (ok === true) {
+                successCount++;
+            }
+            completedCount++;
+            if (completedCount < relays.length) {
+                return;
+            }
+            if (successCount > 0) {
+                showMessage('Published successfully to ' + successCount + ' out of ' + relays.length + ' relays!', 'success');
+                
+                // Mark post as synced and hand over the signed event
+                $.post(ajaxurl, {
+                    action: 'nostr_mark_post_synced',
+                    post_id: postId,
+                    event_id: signedEvent.id,
+                    event: JSON.stringify(signedEvent),
+                    relay_results: JSON.stringify(relayResults),
+                    nonce: nostrForWPAdmin.nonce
+                }).done(function() {
+                    // Refresh the page to show updated status
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1000);
+                });
+            } else {
+                showMessage('Failed to publish to any relays. Check console for details.', 'error');
+                button.prop('disabled', false).text('Sync Now');
+            }
+        }
         
         relays.forEach(relay => {
             try {
@@ -87,71 +126,47 @@
                 };
                 
                 ws.onmessage = function(event) {
+                    let data = null;
                     try {
-                        const data = JSON.parse(event.data);
-                        if (data[0] === 'OK' && data[2] === true) {
-                            successCount++;
-                            console.log('Published to ' + relay + ' successfully!');
-                        } else if (data[0] === 'OK' && data[2] === false) {
-                            console.log('Relay ' + relay + ' rejected event: ' + data[3]);
-                        }
+                        data = JSON.parse(event.data);
                     } catch (e) {
                         console.log('Received non-JSON message from ' + relay + ': ' + event.data);
                     }
-                    
-                    completedCount++;
-                    ws.close();
-                    
-                    // Check if all relays have responded
-                    if (completedCount === relays.length) {
-                        if (successCount > 0) {
-                            showMessage('Published successfully to ' + successCount + ' out of ' + relays.length + ' relays!', 'success');
-                            
-                            // Mark post as synced
-                            $.post(ajaxurl, {
-                                action: 'nostr_mark_post_synced',
-                                post_id: postId,
-                                nonce: nostrForWPAdmin.nonce
-                            }).done(function() {
-                                // Refresh the page to show updated status
-                                setTimeout(function() {
-                                    location.reload();
-                                }, 1000);
-                            });
+                    if (Array.isArray(data) && data[0] === 'OK' && data[1] === signedEvent.id) {
+                        if (data[2] === true) {
+                            console.log('Published to ' + relay + ' successfully!');
                         } else {
-                            showMessage('Failed to publish to any relays. Check console for details.', 'error');
-                            button.prop('disabled', false).text('Sync Now');
+                            console.log('Relay ' + relay + ' rejected event: ' + data[3]);
                         }
+                        finishRelay(relay, data[2] === true, typeof data[3] === 'string' ? data[3] : '');
+                        ws.close();
+                    } else if (Array.isArray(data) && data[0] === 'NOTICE') {
+                        finishRelay(relay, null, typeof data[1] === 'string' ? data[1] : 'notice');
+                        ws.close();
                     }
                 };
                 
                 ws.onerror = function(error) {
                     console.log('WebSocket error for ' + relay + ':', error);
-                    completedCount++;
-                    if (completedCount === relays.length) {
-                        showMessage('WebSocket connection failed for all relays.', 'error');
-                        button.prop('disabled', false).text('Sync Now');
-                    }
+                    finishRelay(relay, null, 'connection error');
                 };
                 
                 ws.onclose = function() {
                     console.log('Disconnected from ' + relay);
+                    finishRelay(relay, null, 'connection closed without a reply');
                 };
                 
                 // Timeout after 10 seconds
                 setTimeout(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
+                    finishRelay(relay, null, 'timeout waiting for relay response');
+                    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
                         ws.close();
                     }
                 }, 10000);
                 
             } catch (error) {
                 console.log('Failed to connect to ' + relay + ':', error);
-                completedCount++;
-                if (completedCount === relays.length) {
-                    showMessage('Failed to connect to any relays.', 'error');
-                    button.prop('disabled', false).text('Sync Now');
-                }
+                finishRelay(relay, null, 'failed to connect');
             }
         });
     }

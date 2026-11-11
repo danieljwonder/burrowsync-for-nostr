@@ -180,10 +180,12 @@
                     if (response.success && response.data.event) {
                         var event = response.data.event;
                         
+                        var signedEvent = null;
                         // Sign the event using NIP-07
-                        self.signEvent(event).then(function(signedEvent) {
-                            // Publish the signed event
-                            return self.publishEvent(signedEvent);
+                        self.signEvent(event).then(function(signed) {
+                            signedEvent = signed;
+                            // Publish the signed event (post id lets the server keep it)
+                            return self.publishEvent(signedEvent, post.ID);
                         }).then(function(publishResult) {
                             results.push({
                                 post_id: post.ID,
@@ -231,12 +233,13 @@
         },
         
         // Publish signed event to relays
-        publishEvent: function(signedEvent) {
+        publishEvent: function(signedEvent, postId) {
             var deferred = $.Deferred();
             
             $.post(ajaxurl, {
                 action: 'nostr_publish_event',
                 event: JSON.stringify(signedEvent),
+                post_id: postId || 0,
                 nonce: nostrForWPAdmin.nonce
             }).done(function(response) {
                 deferred.resolve(response);
