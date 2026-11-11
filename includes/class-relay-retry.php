@@ -75,6 +75,17 @@ class Nostr_Relay_Retry {
      * @param int|null $now for tests
      * @return array{posts: int, attempts: int, adopted: int, locked?: bool}
      */
+    /** Wall-clock start of the current sweep (microtime), for the budget. */
+    private $sweep_started = 0.0;
+
+    /** Seconds left in this sweep's time budget, or the full budget outside a sweep. */
+    private function budget_left() {
+        if (!$this->sweep_started) {
+            return (float) self::TIME_BUDGET;
+        }
+        return self::TIME_BUDGET - (microtime(true) - $this->sweep_started);
+    }
+
     public function sweep($now = null) {
         // WP-Cron's do_action() passes '' when the event has no args.
         $now = is_numeric($now) && (int) $now > 0 ? (int) $now : time();
@@ -89,11 +100,11 @@ class Nostr_Relay_Retry {
         try {
             $stats['adopted'] = $this->adopt_batch($now);
 
-            $started = microtime(true);
+            $this->sweep_started = microtime(true);
             $budget = self::MAX_RELAY_ATTEMPTS;
 
             foreach ($this->due_post_ids($now) as $post_id) {
-                if ($budget <= 0 || (microtime(true) - $started) > self::TIME_BUDGET) {
+                if ($budget <= 0 || $this->budget_left() <= 0) {
                     break;
                 }
                 $stats['posts']++;
@@ -102,6 +113,7 @@ class Nostr_Relay_Retry {
                 $stats['attempts'] += $tried;
             }
         } finally {
+            $this->sweep_started = 0.0;
             delete_transient(self::LOCK);
         }
         return $stats;
@@ -130,9 +142,20 @@ class Nostr_Relay_Retry {
             return 0;
         }
 
-        $results = Nostr_Client::get_instance()->publish_event($event, null, $due);
-        Nostr_Publish_Record::record_results($post_id, $event, $results, 'retry', $now);
-        return count($due);
+        // One relay at a time so the time budget is checked between relays
+        // too: a single post with several slow relays can't run a sweep past
+        // a host's request limit (each attempt may take ~20 s).
+        $results = array();
+        foreach ($due as $i => $url) {
+            if ($i > 0 && $this->budget_left() <= 0) {
+                break;
+            }
+            $results += Nostr_Client::get_instance()->publish_event($event, null, array($url));
+        }
+        if ($results) {
+            Nostr_Publish_Record::record_results($post_id, $event, $results, 'retry', $now);
+        }
+        return count($results);
     }
 
     /**

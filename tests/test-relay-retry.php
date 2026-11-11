@@ -76,7 +76,12 @@ check('nothing due at +100s', $s['attempts'] === 0 && count(Nostr_Client::$publi
 $now = $next + 1;
 $s = $retry->sweep($now);
 check('sweep retried 2 relays', $s['attempts'] === 2);
-$sent = Nostr_Client::$published[0];
+// Retries go out one relay per publish_event() call so the time budget is
+// checked between relays; gather every relay this sweep contacted.
+$sent = array(Nostr_Client::$published[0][0], array());
+foreach (Nostr_Client::$published as $call) {
+    $sent[1] = array_merge($sent[1], $call[1]);
+}
 sort($sent[1]);
 check('sweep picked exactly the down + rate-limited relays', $sent[1] === array($D, $C) || $sent[1] === array($C, $D));
 check('accepted and rejected relays not retried', !in_array($A, $sent[1], true) && !in_array($B, $sent[1], true));
@@ -207,5 +212,25 @@ check("sweep('') from cron retries what is due now", $s['attempts'] === 1 && Nos
 /* ---- 15. never re-signed anywhere above ---- */
 $expected_signs = 1 /* post 1 */ + 1 /* post 2 */ + 20 /* batch posts */ + 1 /* post 99 */ + 1 /* post 200 */;
 check('bunker signed once per post, never for retries', Nostr_NIP46_Client::$sign_calls === $expected_signs);
+
+/* ---- time budget is enforced between relays, not just between posts ---- */
+$GLOBALS['__meta'] = array(); $GLOBALS['__posts'] = array(); $GLOBALS['__cron'] = array(); $GLOBALS['__transients'] = array();
+Nostr_Client::$published = array();
+Nostr_Client::$relays = array($A, $B, $C, $D);
+$GLOBALS['__posts'][70] = (object) array('ID' => 70, 'post_type' => 'note', 'post_status' => 'publish', 'post_date_gmt' => gmdate('Y-m-d H:i:s', $t0));
+Nostr_Client::$replies = array($A => $ACCEPT, $B => $DOWN, $C => $DOWN, $D => $DOWN);
+$publisher->handle_post_publish('publish', 'draft', $GLOBALS['__posts'][70]);
+$publisher->process_post(70);
+Nostr_Client::$published = array();
+// Every call to the relay client burns the whole budget.
+$retry = Nostr_Relay_Retry::get_instance();
+$ref = new ReflectionProperty('Nostr_Relay_Retry', 'sweep_started');
+$ref->setAccessible(true);
+$ref->setValue($retry, microtime(true) - Nostr_Relay_Retry::TIME_BUDGET - 1); // budget already gone
+$tried = $retry->retry_post(70, $t0 + 400, 6);
+$ref->setValue($retry, 0.0);
+check('exhausted budget still sends to the first due relay', $tried === 1 && count(Nostr_Client::$published) === 1);
+check('but stops before the second relay', count(Nostr_Client::$published[0][1]) === 1);
+Nostr_Client::$on_publish = null;
 
 finish('RELAY-RETRY');

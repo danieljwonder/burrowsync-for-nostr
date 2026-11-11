@@ -334,6 +334,11 @@ class Nostr_NIP46_Publisher {
         delete_post_meta($post_id, '_nostr_nip46_next_retry');
         delete_post_meta($post_id, '_nostr_nip46_last_error');
         wp_clear_scheduled_hook(self::CRON_HOOK, array($post_id));
+        // Now that the live event id is written, let the relay sweep pick
+        // the post up (it refuses posts whose stored event isn't live).
+        if (class_exists('Nostr_Publish_Record')) {
+            Nostr_Publish_Record::refresh_schedule($post_id);
+        }
     }
 
     /**

@@ -915,8 +915,15 @@ class Nostr_Admin_Settings {
         // Post editor flow: the browser published straight to the relays and
         // sends the signed event plus what each relay said, so it can be kept.
         $event = isset($_POST['event']) && is_string($_POST['event']) ? json_decode(wp_unslash($_POST['event']), true) : null;
-        if ($event && current_user_can('edit_post', $post_id) && Nostr_Publish_Record::is_valid_event($event, true)
-            && ($event_id === '' || $event_id === $event['id'])) {
+        if ($event !== null) {
+            // An event was supplied: it must verify and match the id, or the
+            // post must not be marked synced on the strength of it.
+            if (!current_user_can('edit_post', $post_id)) {
+                wp_send_json_error(__('You are not allowed to edit this post.', 'burrowsync-for-nostr'));
+            }
+            if (!Nostr_Publish_Record::is_valid_event($event, true) || ($event_id !== '' && $event_id !== $event['id'])) {
+                wp_send_json_error(__('The signed event did not verify; the post was not marked as synced.', 'burrowsync-for-nostr'));
+            }
             $event_id = $event['id'];
             Nostr_Publish_Record::store_event($post_id, $event, 'nip07');
             $raw = isset($_POST['relay_results']) && is_string($_POST['relay_results']) ? json_decode(wp_unslash($_POST['relay_results']), true) : null;

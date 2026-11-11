@@ -182,7 +182,9 @@ class Nostr_Client {
         return self::$instance;
     }
     public function get_user_relays($user_id = null) { return self::$relays; }
+    public static $on_publish = null;
     public function publish_event($event, $user_id = null, $only_relays = null) {
+        if (is_callable(self::$on_publish)) { call_user_func(self::$on_publish); }
         $targets = $only_relays === null ? self::$relays : $only_relays;
         $out = array();
         foreach ($targets as $url) {

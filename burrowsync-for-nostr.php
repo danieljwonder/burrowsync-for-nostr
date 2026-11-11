@@ -3,7 +3,7 @@
  * Plugin Name: BurrowSync for Nostr
  * Plugin URI: https://burrowsync.com
  * Description: Part of the BurrowSync family. Two-way synchronization between WordPress content and Nostr protocol. Supports kind 1 notes and kind 30023 long-form content with NIP-07 browser extension or NIP-46 remote signer (bunker) signing, and NIP-05 domain identity verification.
- * Version: 0.9.0
+ * Version: 0.9.1
  * Author: Daniel Wonder
  * Author URI: https://burrowsync.com
  * Requires at least: 5.9
@@ -39,7 +39,7 @@ if (
 }
 
 // Define plugin constants
-define('NOSTR_FOR_WP_VERSION', '0.9.0');
+define('NOSTR_FOR_WP_VERSION', '0.9.1');
 define('NOSTR_FOR_WP_PLUGIN_FILE', __FILE__);
 define('NOSTR_FOR_WP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('NOSTR_FOR_WP_PLUGIN_URL', plugin_dir_url(__FILE__));

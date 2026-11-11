@@ -4,7 +4,7 @@ Tags: nostr, sync, social, notes, burrowsync
 Requires at least: 5.9
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 0.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -144,6 +144,15 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 
 == Changelog ==
 
+= 0.9.1 =
+* First release under the BurrowSync name
+* Fixed: a relay replying OK=false (for example a paid relay refusing the event) was counted as a successful publish
+* Fixed: stored signed events could be corrupted on save and silently re-signed on retry
+* The exact signed event is now kept for every published post and note, with each relay's result and a short attempt log; download it from the post's Nostr box
+* Every relay in your list is retried in the background until it accepts the event or refuses it outright (5 min, 15 min, 1 h, 6 h, then daily for 7 days); relays added later receive posts from the last 30 days
+* New Relay health card on the settings page
+* Browser (NIP-07) publishing now hands the signed event to WordPress so it is kept too
+
 = 0.9.0 =
 * Renamed from Nostr for WP to BurrowSync for Nostr and joined the BurrowSync family
 * Versioning restarts below 1.0 while the family is in public beta. Features match Nostr for WP 1.4.0
@@ -194,6 +203,9 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 * Admin interface for settings and management
 
 == Upgrade Notice ==
+
+= 0.9.1 =
+Safe update from 0.9.0 and from Nostr for WP 1.4.0. Posts published before this version have no stored signed event, so they cannot be rebroadcast by the new retry sweep; use Backfill to Nostr for any that never reached a relay.
 
 = 0.9.0 =
 Switching from Nostr for WP: install and activate BurrowSync for Nostr, then deactivate Nostr for WP. Your settings carry over. Deleting Nostr for WP afterwards is safe; it does not remove any data.

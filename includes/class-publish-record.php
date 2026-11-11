@@ -696,7 +696,10 @@ class Nostr_Publish_Record {
      * wp_slash() first so the stored string is byte-identical.
      */
     private static function put_json($post_id, $key, $data) {
-        $json = wp_json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // Keep non-ASCII escaped (\uXXXX) so the stored string survives any
+        // database charset; the event id is computed from the decoded array,
+        // so this changes nothing about what is published.
+        $json = wp_json_encode($data, JSON_UNESCAPED_SLASHES);
         update_post_meta($post_id, $key, wp_slash($json));
     }
 }
