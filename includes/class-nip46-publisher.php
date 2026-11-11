@@ -24,6 +24,10 @@
  * signing succeeded but no relay accepted the event, the signed event is
  * kept and re-published verbatim on retry, so a post can never produce
  * two different signed events from this pipeline.
+ *
+ * The signed event is kept after success too (Nostr_Publish_Record), with
+ * the result from every relay and a short attempt log, so it can be
+ * downloaded or rebroadcast later without re-signing.
  */
 
 if (!defined('ABSPATH')) {
@@ -226,6 +230,9 @@ class Nostr_NIP46_Publisher {
             $signed = $this->get_or_create_signed_event($post);
             $results = Nostr_Client::get_instance()->publish_event($signed);
 
+            $source = get_post_meta($post_id, self::BACKFILL_META, true) ? 'backfill' : 'bunker';
+            Nostr_Publish_Record::record_results($post_id, $signed, $results, $source);
+
             $accepted = false;
             foreach ($results as $result) {
                 if (!empty($result['success'])) {
@@ -267,15 +274,15 @@ class Nostr_NIP46_Publisher {
      * @throws Exception
      */
     private function get_or_create_signed_event($post) {
-        $stored = get_post_meta($post->ID, '_nostr_nip46_signed_event', true);
-        if ($stored) {
-            $signed = json_decode($stored, true);
-            if (is_array($signed) && !empty($signed['id']) && !empty($signed['sig']) &&
-                Nostr_NIP46_Crypto::event_id($signed) === $signed['id'] &&
-                Nostr_NIP46_Crypto::schnorr_verify($signed['id'], $signed['sig'], $signed['pubkey'])) {
-                return $signed;
-            }
-            delete_post_meta($post->ID, '_nostr_nip46_signed_event');
+        $signed = Nostr_Publish_Record::get_event($post->ID);
+        if ($signed && Nostr_Publish_Record::is_valid_event($signed, true)) {
+            // Moves an event from the pre-0.9.x key, if that is where it was.
+            Nostr_Publish_Record::store_event($post->ID, $signed, 'retry');
+            return $signed;
+        }
+        if ($signed) {
+            // Unusable (corrupted) copy: log its id and sign afresh.
+            Nostr_Publish_Record::discard_unaccepted($post->ID, 'invalid');
         }
 
         // Build the event exactly as the NIP-07 path does.
@@ -298,9 +305,12 @@ class Nostr_NIP46_Publisher {
         $client = new Nostr_NIP46_Client($this->settings);
         $signed = $client->sign_event($event);
 
-        // Persist so a relay outage cannot lead to signing a second,
-        // different event for the same post.
-        update_post_meta($post->ID, '_nostr_nip46_signed_event', wp_json_encode($signed));
+        // Persist before publishing so a relay outage (or this request
+        // dying mid-publish) cannot lead to signing a second, different
+        // event for the same post. Kept after success as well.
+        if (!Nostr_Publish_Record::store_event($post->ID, $signed, get_post_meta($post->ID, self::BACKFILL_META, true) ? 'backfill' : 'bunker')) {
+            throw new Exception(__('The bunker returned a malformed signed event.', 'burrowsync-for-nostr'));
+        }
 
         return $signed;
     }
@@ -318,7 +328,7 @@ class Nostr_NIP46_Publisher {
         update_post_meta($post_id, '_nostr_sync_status', 'synced');
         update_post_meta($post_id, '_nostr_synced_at', current_time('mysql'));
         update_post_meta($post_id, '_nostr_sync_pending', '0');
-        delete_post_meta($post_id, '_nostr_nip46_signed_event');
+        // The signed event itself is kept (Nostr_Publish_Record).
         delete_post_meta($post_id, '_nostr_nip46_attempts');
         delete_post_meta($post_id, '_nostr_nip46_first_failure');
         delete_post_meta($post_id, '_nostr_nip46_next_retry');
@@ -442,8 +452,9 @@ class Nostr_NIP46_Publisher {
             delete_post_meta($id, '_nostr_nip46_attempts');
             delete_post_meta($id, '_nostr_nip46_next_retry');
             // A cached signature from a failed live attempt carries "now" as
-            // its date; re-sign with the original date instead.
-            delete_post_meta($id, '_nostr_nip46_signed_event');
+            // its date; re-sign with the original date instead. Only events
+            // no relay accepted are dropped, and their ids stay in the log.
+            Nostr_Publish_Record::discard_unaccepted($id, 'resigned for backfill');
             update_post_meta($id, '_nostr_sync_status', 'queued');
         }
         update_option(self::BACKFILL_STATE_OPTION, array(

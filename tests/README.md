@@ -15,12 +15,19 @@ Run `composer install` in the repo root first (the crypto tests need
 | `test-crypto.php` | NIP-44 v2 against official vectors (incl. invalid cases), BIP-340 against official verification vectors + sign roundtrips, NIP-04, npub encoding |
 | `test-settings.php` | bunker URI parsing, secret encryption at rest, keypair persistence and reset |
 | `test-inbound-guard.php` | regression: posts created by inbound sync are **never** queued for outbound NIP-46 publishing (reproduces `wp_insert_post()` hook ordering; see ADR-6 in `docs/DECISIONS.md`) |
+| `test-publish-record.php` | the signed event is kept after a successful publish (byte-identical through `update_post_meta` unslashing), per-relay states (accepted / rejected / unreachable), attempt log and its cap, edit re-sign keeps the old id in the log, legacy retry key migration. Real publisher, local signing key, scripted relay replies (`offline-publish-stubs.php`) |
 
 ```bash
 php tests/test-crypto.php
 php tests/test-settings.php
 php tests/test-inbound-guard.php
+php tests/test-publish-record.php
 ```
+
+Without native PHP: `/opt/data/tools/php-wasm/run-plugin-tests.sh <plugin-dir>` runs every
+`tests/test-*.php` under php-wasm. It prints `[exit] file: last line`; php-wasm can exit 0 on a
+fatal, so read the last line. `test-publisher.php` and `test-client-e2e.php` need a running bunker
+and cannot pass there.
 
 ## Network (live relay)
 

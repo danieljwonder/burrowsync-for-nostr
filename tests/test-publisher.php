@@ -22,7 +22,8 @@ function get_post_meta($post_id, $key, $single = false) {
     return isset($GLOBALS['__meta'][$post_id][$key]) ? $GLOBALS['__meta'][$post_id][$key] : '';
 }
 function update_post_meta($post_id, $key, $value) {
-    $GLOBALS['__meta'][$post_id][$key] = $value;
+    // WordPress runs wp_unslash() on meta values.
+    $GLOBALS['__meta'][$post_id][$key] = is_string($value) ? stripslashes($value) : $value;
     return true;
 }
 function delete_post_meta($post_id, $key) {
@@ -57,6 +58,7 @@ function current_user_can() { return true; }
 function wp_send_json_error($d) { throw new Exception('json_error: ' . json_encode($d)); }
 function wp_send_json_success($d) { throw new Exception('json_success'); }
 function __($s, $d = null) { return $s; }
+function wp_slash($v) { return is_string($v) ? addslashes($v) : $v; }
 
 /* Content mapper stub producing the same shape as the real one */
 class Nostr_Content_Mapper {
@@ -82,6 +84,7 @@ class Nostr_Client {
         if (self::$instance === null) self::$instance = new self();
         return self::$instance;
     }
+    public function get_user_relays() { return array('wss://stub'); }
     public function publish_event($event) {
         if (self::$accept) {
             self::$published[] = $event;
@@ -91,6 +94,7 @@ class Nostr_Client {
     }
 }
 
+require NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-publish-record.php';
 require NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-publisher.php';
 
 $fail = 0;
@@ -144,7 +148,7 @@ check('status back to queued', get_post_meta(2, '_nostr_sync_status', true) === 
 check('attempt counted', get_post_meta(2, '_nostr_nip46_attempts', true) === 1);
 $next = wp_next_scheduled(Nostr_NIP46_Publisher::CRON_HOOK, array(2));
 check('first retry ~5 min out', abs($next - time() - 300) < 10);
-$stored = get_post_meta(2, '_nostr_nip46_signed_event', true);
+$stored = get_post_meta(2, '_nostr_signed_event', true);
 check('signed event stored for reuse', $stored !== '');
 $stored_id = json_decode($stored, true)['id'];
 
@@ -152,6 +156,7 @@ Nostr_Client::$accept = true;
 $result = $publisher->process_post(2);
 check('retry succeeds', $result['success']);
 check('same signed event reused (no re-sign)', get_post_meta(2, '_nostr_event_id', true) === $stored_id);
+check('signed event kept after success', json_decode(get_post_meta(2, '_nostr_signed_event', true), true)['id'] === $stored_id);
 
 /* ---- scenario 3: bunker unreachable -> backoff schedule ---- */
 $settings->save_bunker_uri('bunker://' . str_repeat('a', 64) . '?relay=wss://127.0.0.1:1/&secret=x');
