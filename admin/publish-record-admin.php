@@ -23,6 +23,72 @@ class Nostr_Publish_Record_Admin {
 
     private function __construct() {
         add_action('admin_post_' . self::DOWNLOAD_ACTION, array($this, 'download_signed_event'));
+        add_action('nostr_for_wp_settings_cards', array($this, 'render_relay_health_card'), 30);
+    }
+
+    /**
+     * Settings page card: one line per relay so dead or paid-only relays
+     * stand out.
+     */
+    public function render_relay_health_card() {
+        if (!current_user_can('manage_options') || !class_exists('Nostr_Relay_Retry')) {
+            return;
+        }
+        $health = Nostr_Relay_Retry::relay_health();
+        ?>
+        <div class="nostr-card nostr-card-full" id="nostr-relay-health-card">
+            <h2><?php esc_html_e('Relay health', 'burrowsync-for-nostr'); ?></h2>
+            <p class="description"><?php esc_html_e('How your recent posts and notes are doing on each relay. Relays that have not accepted an event are retried in the background for up to 7 days, unless they refuse it outright.', 'burrowsync-for-nostr'); ?></p>
+            <?php if (empty($health)): ?>
+                <p><?php esc_html_e('No relay results yet.', 'burrowsync-for-nostr'); ?></p>
+            <?php else: ?>
+                <table class="widefat striped" style="margin-top:8px;">
+                    <thead>
+                        <tr>
+                            <th><?php esc_html_e('Relay', 'burrowsync-for-nostr'); ?></th>
+                            <th><?php esc_html_e('Accepted', 'burrowsync-for-nostr'); ?></th>
+                            <th><?php esc_html_e('Pending', 'burrowsync-for-nostr'); ?></th>
+                            <th><?php esc_html_e('Rejected', 'burrowsync-for-nostr'); ?></th>
+                            <th><?php esc_html_e('Gave up', 'burrowsync-for-nostr'); ?></th>
+                            <th><?php esc_html_e('Last success', 'burrowsync-for-nostr'); ?></th>
+                            <th><?php esc_html_e('Last problem', 'burrowsync-for-nostr'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($health as $url => $h): ?>
+                            <tr>
+                                <td style="word-break:break-all;">
+                                    <code><?php echo esc_html($url); ?></code>
+                                    <?php if (!$h['in_list']): ?>
+                                        <br><small><?php esc_html_e('(no longer in your relay list)', 'burrowsync-for-nostr'); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?php echo esc_html(number_format_i18n($h['accepted'])); ?></td>
+                                <td><?php echo esc_html(number_format_i18n($h['pending'])); ?></td>
+                                <td>
+                                    <?php echo esc_html(number_format_i18n($h['rejected'])); ?>
+                                    <?php if ($h['reject_reason'] !== ''): ?>
+                                        <br><small style="color:#b32d2e;"><?php echo esc_html($h['reject_reason']); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?php echo esc_html(number_format_i18n($h['expired'])); ?></td>
+                                <td><?php
+                                    echo $h['last_success']
+                                        ? esc_html(sprintf(
+                                            /* translators: %s: human time difference */
+                                            __('%s ago', 'burrowsync-for-nostr'),
+                                            human_time_diff($h['last_success'], time())
+                                        ))
+                                        : esc_html__('never', 'burrowsync-for-nostr');
+                                ?></td>
+                                <td style="color:#50575e;"><?php echo esc_html($h['last_reason']); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+        <?php
     }
 
     /**
@@ -136,6 +202,15 @@ class Nostr_Publish_Record_Admin {
                                     __('%s ago', 'burrowsync-for-nostr'),
                                     human_time_diff(intval($row['last_attempt']), time())
                                 )); ?></span>
+                            <?php endif; ?>
+                            <?php if (!empty($row['expired'])): ?>
+                                &middot; <?php esc_html_e('retries stopped after 7 days', 'burrowsync-for-nostr'); ?>
+                            <?php elseif (!empty($row['next_retry']) && $row['state'] !== Nostr_Publish_Record::STATE_ACCEPTED && $row['state'] !== Nostr_Publish_Record::STATE_REJECTED): ?>
+                                &middot; <?php echo esc_html(sprintf(
+                                    /* translators: %s: human time difference */
+                                    __('next try in %s', 'burrowsync-for-nostr'),
+                                    human_time_diff(time(), max(time() + 1, intval($row['next_retry'])))
+                                )); ?>
                             <?php endif; ?>
                             <?php if ($row['message'] !== '' && $row['state'] !== Nostr_Publish_Record::STATE_ACCEPTED): ?>
                                 <br><span style="color:#50575e;"><?php echo esc_html($row['message']); ?></span>
