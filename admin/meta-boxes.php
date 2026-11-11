@@ -95,6 +95,14 @@ class Nostr_Admin_Meta_Boxes {
                     <?php echo esc_html($synced_at); ?>
                 </p>
             <?php endif; ?>
+
+            <?php
+            // In bunker mode the "Nostr Remote Signer" box shows the relay
+            // results instead, so they aren't printed twice.
+            if (class_exists('Nostr_Publish_Record_Admin') && Nostr_NIP46_Settings::get_instance()->get_signing_method() !== 'nip46') {
+                Nostr_Publish_Record_Admin::render_post_box($post->ID);
+            }
+            ?>
             
             <p>
                 <strong><?php _e('Status:', 'burrowsync-for-nostr'); ?></strong>

@@ -739,6 +739,8 @@ class Nostr_NIP46_Admin {
                 <code style="font-size:11px;word-break:break-all;"><?php echo esc_html($info['event_id']); ?></code></p>
             <?php endif; ?>
 
+            <?php Nostr_Publish_Record_Admin::render_post_box($post->ID); ?>
+
             <?php if ($info['last_error']): ?>
                 <p><strong><?php _e('Last error:', 'burrowsync-for-nostr'); ?></strong><br>
                 <span style="font-size:12px;color:#b32d2e;"><?php echo esc_html($info['last_error']); ?></span></p>
