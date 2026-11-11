@@ -145,9 +145,11 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 == Changelog ==
 
 = 0.9.2 =
-* Fixed: relays that refuse a bare WebSocket handshake (nostr.wine answered 403) now accept connections; the plugin identifies itself with a User-Agent and your site as the Origin
+* Compatibility: the WebSocket handshake now includes a User-Agent and site Origin. This may help relays that reject bare handshakes; resolution of nostr.wine HTTP 403 is not yet live-verified.
 * New: load your relay configuration from your Nostr relay list (NIP-65, kind 10002), and optionally publish changes back to it when you save. Read-only relays in your Nostr list are kept; if the list changed in another app since the page loaded, publishing is refused with a diff rather than overwriting it
 * The relay Test button now opens a real WebSocket connection and asks for an event, instead of only checking the port
+* WebSocket TLS certificate and hostname verification are enabled; failed or incomplete relay-list lookups stop publishing rather than being treated as an empty list
+* Relay list history: the last 10 relay lists seen on Nostr or published from here are kept, with a Revert button that republishes one and sets the WordPress relays to match. The bunker's signed list is checked against what was requested, Nostr is rechecked after signing, and a replacement is always dated after the list it replaces
 
 = 0.9.1 =
 * First release under the BurrowSync name
@@ -210,7 +212,7 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 == Upgrade Notice ==
 
 = 0.9.2 =
-Safe update. If a paid relay such as nostr.wine showed "403 Forbidden" in Relay health, it will start accepting your posts on the next retry.
+Adds NIP-65 relay-list import and optional publishing, real WebSocket relay tests, and handshake headers. Existing settings are retained. Paid-relay HTTP 403 resolution still requires live verification.
 
 = 0.9.1 =
 Safe update from 0.9.0 and from Nostr for WP 1.4.0. Posts published before this version have no stored signed event, so they cannot be rebroadcast by the new retry sweep; use Backfill to Nostr for any that never reached a relay.

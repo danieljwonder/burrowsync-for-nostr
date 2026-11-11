@@ -45,6 +45,7 @@ class Nostr_Admin_Settings {
         add_action('wp_ajax_nostr_relay_list_fetch', array($this, 'relay_list_fetch_ajax'));
         add_action('wp_ajax_nostr_relay_list_publish', array($this, 'relay_list_publish_ajax'));
         add_action('wp_ajax_nostr_relay_list_broadcast', array($this, 'relay_list_broadcast_ajax'));
+        add_action('wp_ajax_nostr_relay_list_revert', array($this, 'relay_list_revert_ajax'));
         add_action('wp_ajax_nostr_force_sync', array($this, 'force_sync_ajax'));
         add_action('wp_ajax_nostr_get_pending_posts', array($this, 'get_pending_posts_ajax'));
         add_action('wp_ajax_nostr_get_post_event', array($this, 'get_post_event_ajax'));
@@ -181,6 +182,11 @@ class Nostr_Admin_Settings {
                                             <?php _e('Also update my Nostr relay list (NIP-65) when I save', 'burrowsync-for-nostr'); ?></label>
                                     </p>
                                     <div id="nostr-relay-list-status" class="description" style="margin-top:6px;"></div>
+                                    <details id="nostr-relay-list-history" style="margin-top:8px;display:none;">
+                                        <summary><?php _e('Previous relay lists', 'burrowsync-for-nostr'); ?></summary>
+                                        <p class="description"><?php _e('The last few relay lists seen on Nostr or published from here. Revert republishes one as your current list and sets the relays above to match.', 'burrowsync-for-nostr'); ?></p>
+                                        <ul id="nostr-relay-list-history-items" style="margin:0;"></ul>
+                                    </details>
                                     <p class="description" style="margin-top: 10px; font-style: italic;">
                                         <?php _e('Test opens a real connection to the relay and asks for one event. Your Nostr relay list is what other apps use to find your posts; the relays here become read+write entries, and any read-only relays already in your list are kept.', 'burrowsync-for-nostr'); ?>
                                     </p>
@@ -600,12 +606,28 @@ class Nostr_Admin_Settings {
         if (!Nostr_Relay_List::site_pubkey()) {
             wp_send_json_error(__('Connect your Nostr key first (bunker or browser extension).', 'burrowsync-for-nostr'));
         }
-        $event = Nostr_Relay_List::fetch_current();
-        if (!$event) {
-            wp_send_json_success(array('found' => false, 'event_id' => '', 'write' => array(), 'read' => array()));
+        try {
+            $event = Nostr_Relay_List::fetch_current();
+        } catch (Exception $e) {
+            wp_send_json_error($e->getMessage());
+            return;
         }
+        $gap = Nostr_Relay_List::lookup_gap();
+        $lookup = Nostr_Relay_List::$last_lookup;
+        $common = array(
+            'gap'     => $gap,
+            'silent'  => $lookup['silent'],
+            'history' => array_map(function ($row) {
+                $p = Nostr_Relay_List::parse(array('tags' => $row['tags']));
+                return array('id' => $row['id'], 'created_at' => $row['created_at'], 'source' => $row['source'], 'write' => $p['write'], 'read' => array_values(array_diff($p['read'], $p['write'])));
+            }, Nostr_Relay_List::history()),
+        );
+        if (!$event) {
+            wp_send_json_success($common + array('found' => false, 'event_id' => '', 'write' => array(), 'read' => array()));
+        }
+        Nostr_Relay_List::remember($event, 'nostr');
         $parsed = Nostr_Relay_List::parse($event);
-        wp_send_json_success(array(
+        wp_send_json_success($common + array(
             'found'      => true,
             'event_id'   => $event['id'],
             'created_at' => (int) $event['created_at'],
@@ -633,6 +655,23 @@ class Nostr_Admin_Settings {
     }
 
     /**
+     * Republish a remembered relay list (revert).
+     */
+    public function relay_list_revert_ajax() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        $history_id = isset($_POST['history_id']) ? sanitize_text_field(wp_unslash($_POST['history_id'])) : '';
+        $expected = isset($_POST['expected_id']) ? sanitize_text_field(wp_unslash($_POST['expected_id'])) : null;
+        $result = Nostr_Relay_List::revert($history_id, $expected);
+        if (!empty($result['ok'])) {
+            wp_send_json_success($result);
+        }
+        wp_send_json_error($result);
+    }
+
+    /**
      * Browser-signed kind 10002: verify and broadcast.
      */
     public function relay_list_broadcast_ajax() {
@@ -648,7 +687,8 @@ class Nostr_Admin_Settings {
         if (!$pubkey || !isset($event['pubkey']) || strtolower($event['pubkey']) !== $pubkey) {
             wp_send_json_error(__('The signed relay list is not from this site\'s key.', 'burrowsync-for-nostr'));
         }
-        $result = Nostr_Relay_List::broadcast($event);
+        $expected = isset($_POST['expected_id']) && is_string($_POST['expected_id']) ? sanitize_text_field(wp_unslash($_POST['expected_id'])) : null;
+        $result = Nostr_Relay_List::broadcast_browser($event, $expected);
         if (!empty($result['ok'])) {
             wp_send_json_success($result);
         }

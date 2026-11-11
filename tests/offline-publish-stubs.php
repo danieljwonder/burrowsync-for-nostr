@@ -142,11 +142,13 @@ class Nostr_NIP46_Client {
     public function __construct($settings) {}
     public function sign_event($event) {
         self::$sign_calls++;
+        if (is_callable(self::$tamper)) { $event = call_user_func(self::$tamper, $event); }
         $event['pubkey'] = Nostr_NIP46_Crypto::pubkey_from_privkey(self::$priv);
         $event['id'] = Nostr_NIP46_Crypto::event_id($event);
         $event['sig'] = Nostr_NIP46_Crypto::schnorr_sign($event['id'], self::$priv);
         return $event;
     }
+    public static $tamper = null;
 }
 Nostr_NIP46_Client::$priv = hash('sha256', 'burrowsync offline test key');
 

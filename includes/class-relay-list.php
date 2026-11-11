@@ -35,7 +35,12 @@ class Nostr_Relay_List {
         'wss://relay.nostr.band',
     );
 
-    const QUERY_TIMEOUT = 8;
+    const QUERY_TIMEOUT = 3;
+    const HISTORY_OPTION = 'nostr_relay_list_history';
+    const HISTORY_MAX = 10;
+
+    /** Details of the most recent fetch_current(): asked/answered/silent/complete. */
+    public static $last_lookup = array('asked' => array(), 'answered' => array(), 'silent' => array(), 'complete' => false);
 
     /**
      * Hex pubkey the site publishes as: the bunker's user pubkey in bunker
@@ -71,25 +76,70 @@ class Nostr_Relay_List {
         }
         $seen = array();
         $newest = null;
+        $lookup = array('asked' => array(), 'answered' => array(), 'silent' => array(), 'complete' => true);
+        $deadline = microtime(true) + 18;
         foreach ($relays as $url) {
             $url = Nostr_Publish_Record::normalize_url($url);
             if ($url === '' || isset($seen[$url])) {
                 continue;
             }
             $seen[$url] = true;
-            foreach (self::query($url, array('kinds' => array(self::KIND), 'authors' => array($pubkey), 'limit' => 1)) as $event) {
+            $lookup['asked'][] = $url;
+            if (microtime(true) >= $deadline) {
+                $lookup['complete'] = false;
+                $lookup['silent'][] = $url;
+                continue;
+            }
+            try {
+                $events = static::query($url, array('kinds' => array(self::KIND), 'authors' => array($pubkey), 'limit' => 1));
+                $lookup['answered'][] = $url;
+            } catch (Exception $e) {
+                $lookup['silent'][] = $url;
+                continue;
+            }
+            foreach ($events as $event) {
                 if (!is_array($event) || empty($event['id']) || (int) $event['kind'] !== self::KIND) {
                     continue;
                 }
                 if (!self::verify($event, $pubkey)) {
                     continue;
                 }
-                if ($newest === null || (int) $event['created_at'] > (int) $newest['created_at']) {
+                if ($newest === null || (int) $event['created_at'] > (int) $newest['created_at']
+                    || ((int) $event['created_at'] === (int) $newest['created_at'] && strcmp($event['id'], $newest['id']) < 0)) {
                     $newest = $event;
                 }
             }
         }
+        self::$last_lookup = $lookup;
+        if (!$lookup['answered']) {
+            throw new RuntimeException(__('No relay completed the relay-list lookup. Nothing will be published; try again later.', 'burrowsync-for-nostr'));
+        }
         return $newest;
+    }
+
+    /**
+     * Whether the last lookup is solid enough to publish on top of: it
+     * finished in time and at least one of the site's own relays answered.
+     * Import may proceed on a partial lookup (with a warning); replacing
+     * the public list may not.
+     *
+     * @return string '' when fine, otherwise the reason
+     */
+    public static function lookup_gap() {
+        $l = self::$last_lookup;
+        $own = array_map(array('Nostr_Publish_Record', 'normalize_url'), Nostr_Publish_Record::configured_relays());
+        $own_answered = array_intersect($own, $l['answered']);
+        if (!$l['complete']) {
+            return __('The relay-list lookup ran out of time before every relay answered.', 'burrowsync-for-nostr');
+        }
+        if ($own && !$own_answered) {
+            return sprintf(
+                /* translators: %s: relay list */
+                __('None of your configured relays answered the lookup (%s).', 'burrowsync-for-nostr'),
+                implode(', ', array_intersect($own, $l['silent']))
+            );
+        }
+        return '';
     }
 
     /**
@@ -117,7 +167,7 @@ class Nostr_Relay_List {
                 $read[] = $url;
             } elseif ($marker === 'write') {
                 $write[] = $url;
-            } else {
+            } elseif ($marker === '') {
                 $both[] = $url;
             }
         }
@@ -155,11 +205,17 @@ class Nostr_Relay_List {
                 }
             }
         }
+        // Relays keep the kind 10002 with the newest created_at, so a
+        // replacement must be strictly newer than what is there.
+        $created = time();
+        if ($current && isset($current['created_at']) && (int) $current['created_at'] >= $created) {
+            $created = (int) $current['created_at'] + 1;
+        }
         return array(
             'kind'       => self::KIND,
             'content'    => '',
             'tags'       => $tags,
-            'created_at' => time(),
+            'created_at' => $created,
         );
     }
 
@@ -186,10 +242,16 @@ class Nostr_Relay_List {
      * @return array{ok: bool, message: string, diff?: array, event_id?: string, relays?: array}
      */
     public static function publish(array $wp_relays, $expected_id = null) {
-        $current = static::fetch_current();
+        if ($expected_id === null || ($expected_id !== '' && !preg_match('/^[0-9a-f]{64}$/', $expected_id))) {
+            return array('ok' => false, 'message' => __('Load your Nostr relay list before publishing.', 'burrowsync-for-nostr'));
+        }
+        try {
+            $current = static::fetch_current();
+        } catch (Exception $e) {
+            return array('ok' => false, 'message' => $e->getMessage());
+        }
         $current_id = $current ? $current['id'] : '';
         if ($expected_id !== null && $expected_id !== $current_id) {
-            $loaded = array();
             $now = $current ? self::parse($current) : array('write' => array());
             return array(
                 'ok'      => false,
@@ -199,8 +261,21 @@ class Nostr_Relay_List {
             );
         }
 
-        $unsigned = self::build_event($wp_relays, $current);
+        $gap = static::lookup_gap();
+        if ($gap !== '') {
+            return array('ok' => false, 'message' => $gap . ' ' . __('Not publishing, so a newer list on a silent relay cannot be overwritten.', 'burrowsync-for-nostr'));
+        }
 
+        $unsigned = self::build_event($wp_relays, $current);
+        return self::sign_and_broadcast($unsigned, $current, $expected_id);
+    }
+
+    /**
+     * Shared tail of publish() and revert(): sign via the bunker (or hand
+     * back for the browser), make sure the signer returned exactly what was
+     * asked, recheck Nostr after the signing round trip, then broadcast.
+     */
+    private static function sign_and_broadcast(array $unsigned, $current, $expected_id) {
         if (!class_exists('Nostr_NIP46_Settings') || !Nostr_NIP46_Settings::get_instance()->is_bunker_active()) {
             // Browser signing: hand the unsigned event back for NIP-07.
             return array('ok' => false, 'needs_browser_signer' => true, 'unsigned' => $unsigned, 'message' => '');
@@ -212,7 +287,150 @@ class Nostr_Relay_List {
         } catch (Exception $e) {
             return array('ok' => false, 'message' => sanitize_text_field($e->getMessage()));
         }
+        if (!self::signed_matches($signed, $unsigned)) {
+            return array('ok' => false, 'message' => __('The signer returned a different relay list than was requested. Nothing was published.', 'burrowsync-for-nostr'));
+        }
+
+        // The bunker round trip can take a while; make sure nothing landed meanwhile.
+        try {
+            $again = static::fetch_current();
+        } catch (Exception $e) {
+            return array('ok' => false, 'message' => $e->getMessage());
+        }
+        if (($again ? $again['id'] : '') !== $expected_id) {
+            return array('ok' => false, 'stale' => true, 'message' => __('Your relay list on Nostr changed while the signer was working. Reload the page and try again.', 'burrowsync-for-nostr'), 'diff' => array('added' => array(), 'removed' => array()));
+        }
+        self::remember($current, 'nostr');
         return self::broadcast($signed);
+    }
+
+    /** The signed event must carry exactly the requested kind, tags, content and time. */
+    public static function signed_matches(array $signed, array $unsigned) {
+        return isset($signed['kind'], $signed['tags'], $signed['content'], $signed['created_at'])
+            && (int) $signed['kind'] === (int) $unsigned['kind']
+            && $signed['tags'] === $unsigned['tags']
+            && $signed['content'] === $unsigned['content']
+            && (int) $signed['created_at'] === (int) $unsigned['created_at'];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* History: the last few relay lists, so a bad publish can be undone.  */
+
+    /**
+     * @return array[] newest first: {id, created_at, tags, source, saved_at}
+     */
+    public static function history() {
+        $h = get_option(self::HISTORY_OPTION, array());
+        return is_array($h) ? $h : array();
+    }
+
+    /** Keep a signed kind 10002 (ours or one fetched from Nostr). */
+    public static function remember($event, $source) {
+        if (!is_array($event) || empty($event['id']) || !isset($event['tags'])) {
+            return;
+        }
+        $h = self::history();
+        foreach ($h as $row) {
+            if ($row['id'] === $event['id']) {
+                return;
+            }
+        }
+        array_unshift($h, array(
+            'id'         => $event['id'],
+            'created_at' => (int) $event['created_at'],
+            'tags'       => $event['tags'],
+            'source'     => $source === 'wordpress' ? 'wordpress' : 'nostr',
+            'saved_at'   => time(),
+        ));
+        update_option(self::HISTORY_OPTION, array_slice($h, 0, self::HISTORY_MAX), false);
+    }
+
+    /**
+     * Republish a remembered relay list (as a new, newer event) and set the
+     * WordPress relays to its write set. Same guards as publish().
+     */
+    public static function revert($history_id, $expected_id) {
+        $entry = null;
+        foreach (self::history() as $row) {
+            if ($row['id'] === $history_id) {
+                $entry = $row;
+                break;
+            }
+        }
+        if (!$entry) {
+            return array('ok' => false, 'message' => __('That relay list is no longer in the history.', 'burrowsync-for-nostr'));
+        }
+        if ($expected_id === null || ($expected_id !== '' && !preg_match('/^[0-9a-f]{64}$/', $expected_id))) {
+            return array('ok' => false, 'message' => __('Load your Nostr relay list before reverting.', 'burrowsync-for-nostr'));
+        }
+        try {
+            $current = static::fetch_current();
+        } catch (Exception $e) {
+            return array('ok' => false, 'message' => $e->getMessage());
+        }
+        if (($current ? $current['id'] : '') !== $expected_id) {
+            return array('ok' => false, 'stale' => true, 'message' => __('Your relay list on Nostr changed since this page loaded. Reload the page before reverting.', 'burrowsync-for-nostr'), 'diff' => array('added' => array(), 'removed' => array()));
+        }
+        $gap = static::lookup_gap();
+        if ($gap !== '') {
+            return array('ok' => false, 'message' => $gap);
+        }
+        $unsigned = self::build_event(array(), $current);
+        $unsigned['tags'] = $entry['tags']; // exactly the remembered list
+        $result = self::sign_and_broadcast($unsigned, $current, $expected_id);
+        if (!empty($result['ok'])) {
+            $parsed = self::parse(array('tags' => $entry['tags']));
+            self::set_wp_relays($parsed['write']);
+            $result['wp_relays'] = $parsed['write'];
+        }
+        return $result;
+    }
+
+    /** Store the WordPress relay list (same option the settings card saves). */
+    private static function set_wp_relays(array $relays) {
+        $options = get_option('nostr_for_wp_options', array());
+        $options['relays'] = array_values($relays);
+        update_option('nostr_for_wp_options', $options);
+    }
+
+    /** Recheck after browser approval, which may take several minutes. */
+    public static function broadcast_browser(array $signed, $expected_id) {
+        if ($expected_id === null || ($expected_id !== '' && !preg_match('/^[0-9a-f]{64}$/', $expected_id))) {
+            return array('ok' => false, 'message' => __('Load the relay list first.', 'burrowsync-for-nostr'));
+        }
+        try {
+            $current = static::fetch_current();
+        } catch (Exception $e) {
+            return array('ok' => false, 'message' => $e->getMessage());
+        }
+        if (($current ? $current['id'] : '') !== $expected_id) {
+            return array('ok' => false, 'message' => __('The Nostr relay list changed while waiting for your signer. Load it again before publishing.', 'burrowsync-for-nostr'));
+        }
+        $gap = static::lookup_gap();
+        if ($gap !== '') {
+            return array('ok' => false, 'message' => $gap);
+        }
+        $proposed = self::build_event(Nostr_Publish_Record::configured_relays(), $current);
+        $remembered = null;
+        foreach (self::history() as $row) {
+            if (isset($signed['tags']) && $row['tags'] === $signed['tags']) {
+                $remembered = $row;
+            }
+        }
+        $tags_ok = isset($signed['tags']) && ($signed['tags'] === $proposed['tags'] || $remembered !== null);
+        $newer = isset($signed['created_at']) && (!$current || (int) $signed['created_at'] > (int) $current['created_at']);
+        if (!$tags_ok || !isset($signed['content'], $signed['created_at']) || $signed['content'] !== ''
+            || !$newer || abs(time() - (int) $signed['created_at']) > 600) {
+            return array('ok' => false, 'message' => __('The signed relay list no longer matches the saved configuration. Save again.', 'burrowsync-for-nostr'));
+        }
+        self::remember($current, 'nostr');
+        $result = self::broadcast($signed);
+        if (!empty($result['ok']) && $remembered !== null && $signed['tags'] !== $proposed['tags']) {
+            $parsed = self::parse(array('tags' => $remembered['tags']));
+            self::set_wp_relays($parsed['write']);
+            $result['wp_relays'] = $parsed['write'];
+        }
+        return $result;
     }
 
     /**
@@ -220,7 +438,8 @@ class Nostr_Relay_List {
      * discovery relays (so other clients find it), and record the result.
      */
     public static function broadcast(array $signed) {
-        if (!Nostr_Publish_Record::is_valid_event($signed, true) || (int) $signed['kind'] !== self::KIND) {
+        if (!Nostr_Publish_Record::is_valid_event($signed, true) || (int) $signed['kind'] !== self::KIND
+            || $signed['pubkey'] !== self::site_pubkey()) {
             return array('ok' => false, 'message' => __('The signed relay list did not verify.', 'burrowsync-for-nostr'));
         }
         $targets = array_values(array_unique(array_merge(
@@ -237,6 +456,9 @@ class Nostr_Relay_List {
             } else {
                 $failed[$url] = $msg;
             }
+        }
+        if (!empty($ok)) {
+            self::remember($signed, 'wordpress');
         }
         update_option('nostr_relay_list_last_publish', array(
             'time'     => time(),
@@ -271,7 +493,7 @@ class Nostr_Relay_List {
             return array('ok' => false, 'message' => __('Not a relay URL.', 'burrowsync-for-nostr'));
         }
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-websocket-client.php';
-        $ws = new Nostr_WebSocket_Client($url);
+        $ws = new Nostr_WebSocket_Client($url, 2);
         if (!$ws->connect()) {
             $why = method_exists($ws, 'get_last_error') ? $ws->get_last_error() : '';
             return array('ok' => false, 'message' => $why !== '' ? $why : __('Connection failed.', 'burrowsync-for-nostr'));
@@ -304,18 +526,19 @@ class Nostr_Relay_List {
     /* ------------------------------------------------------------------ */
 
     /** Query one relay with a short timeout; returns events. */
-    private static function query($url, array $filter) {
+    protected static function query($url, array $filter) {
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-websocket-client.php';
         $events = array();
-        $ws = new Nostr_WebSocket_Client($url);
+        $ws = new Nostr_WebSocket_Client($url, 2);
         if (!$ws->connect()) {
-            return $events;
+            throw new RuntimeException('Relay connection failed');
         }
         $sub = 'rl_' . substr(md5((string) microtime(true)), 0, 8);
         if (!$ws->send_message(json_encode(array('REQ', $sub, $filter)))) {
             $ws->close();
-            return $events;
+            throw new RuntimeException('Relay request failed');
         }
+        $completed = false;
         $start = time();
         while ((time() - $start) < self::QUERY_TIMEOUT) {
             $msg = $ws->read_message();
@@ -324,7 +547,10 @@ class Nostr_Relay_List {
                 if (is_array($d) && isset($d[0], $d[1]) && $d[1] === $sub) {
                     if ($d[0] === 'EVENT' && isset($d[2])) {
                         $events[] = $d[2];
-                    } elseif ($d[0] === 'EOSE' || $d[0] === 'CLOSED') {
+                    } elseif ($d[0] === 'EOSE') {
+                        $completed = true;
+                        break;
+                    } elseif ($d[0] === 'CLOSED') {
                         break;
                     }
                 }
@@ -333,6 +559,9 @@ class Nostr_Relay_List {
         }
         $ws->send_message(json_encode(array('CLOSE', $sub)));
         $ws->close();
+        if (!$completed) {
+            throw new RuntimeException('Relay did not complete the query');
+        }
         return $events;
     }
 

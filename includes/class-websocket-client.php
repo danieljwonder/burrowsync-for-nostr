@@ -30,12 +30,15 @@ class Nostr_WebSocket_Client {
      * Why the last connect() failed (short, for status displays).
      */
     private $last_error = '';
+
+    private $connect_timeout = 10;
     
     /**
      * Constructor
      */
-    public function __construct($relay_url) {
+    public function __construct($relay_url, $connect_timeout = 10) {
         $this->relay_url = $relay_url;
+        $this->connect_timeout = max(1, (int) $connect_timeout);
     }
     
     /**
@@ -56,8 +59,8 @@ class Nostr_WebSocket_Client {
             // Create socket connection with timeout
             $context = stream_context_create([
                 'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
                 ]
             ]);
             
@@ -67,14 +70,14 @@ class Nostr_WebSocket_Client {
                 $socket_url = "tcp://{$host}:{$port}";
             }
             
-            $this->socket = @stream_socket_client($socket_url, $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $context);
+            $this->socket = @stream_socket_client($socket_url, $errno, $errstr, $this->connect_timeout, STREAM_CLIENT_CONNECT, $context);
             
             if (!$this->socket) {
                 throw new Exception("Failed to connect to {$host}:{$port} - {$errstr} ({$errno})");
             }
             
             // Set socket timeout
-            stream_set_timeout($this->socket, 10);
+            stream_set_timeout($this->socket, $this->connect_timeout);
             
             // Perform WebSocket handshake
             $this->perform_handshake($host, $path);
@@ -87,6 +90,7 @@ class Nostr_WebSocket_Client {
             // Keep the first line only (e.g. "HTTP/1.1 503 Service Unavailable").
             $first = strtok(str_replace("\r", '', $e->getMessage()), "\n");
             $this->last_error = substr((string) $first, 0, 200);
+            $this->close();
             $this->connected = false;
             return false;
         }
