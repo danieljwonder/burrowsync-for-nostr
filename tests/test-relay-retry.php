@@ -193,6 +193,14 @@ check('health: expired counted', $h[$C]['expired'] === 1);
 check('health: configured relay with no data listed', isset($h['wss://unused.example']) && $h['wss://unused.example']['in_list']);
 check('health: relay out of the list flagged', $h[$B]['in_list'] === false);
 
+/* ---- 13b. forget a dropped relay ---- */
+check('forget: still-configured relay refused', Nostr_Publish_Record::forget_relay($A) === false);
+$before = Nostr_Publish_Record::get_event(1)['id'];
+$n = Nostr_Publish_Record::forget_relay($B);
+check('forget: dropped relay removed from posts', $n >= 1 && !isset(Nostr_Publish_Record::get_relay_table(1)[$B]));
+check('forget: other relays and the signed event untouched', isset(Nostr_Publish_Record::get_relay_table(1)[$A]) && Nostr_Publish_Record::get_event(1)['id'] === $before);
+check('forget: idempotent', Nostr_Publish_Record::forget_relay($B) === 0);
+
 /* ---- 14. called the way WP-Cron calls it: do_action(hook) passes '' ---- */
 Nostr_Client::$relays = array($A, $C);
 Nostr_Client::$replies = array($A => $ACCEPT, $C => $DOWN);

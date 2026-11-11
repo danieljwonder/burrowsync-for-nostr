@@ -597,6 +597,41 @@ class Nostr_Publish_Record {
         return $out;
     }
 
+    /**
+     * Drop a relay that is no longer in the site's list from every post's
+     * relay table, so it leaves the health card and is never retried.
+     * Signed events and the publish log are untouched. Refused for a relay
+     * that is still configured.
+     *
+     * @return int|false posts touched, or false when still configured
+     */
+    public static function forget_relay($url, $limit = 5000) {
+        $url = self::normalize_url($url);
+        if ($url === '' || in_array($url, self::configured_relays(), true)) {
+            return false;
+        }
+        $ids = get_posts(array(
+            'post_type'      => array('post', 'note'),
+            'post_status'    => 'any',
+            'posts_per_page' => (int) $limit,
+            'fields'         => 'ids',
+            'meta_key'       => self::META_RELAYS,
+            'meta_compare'   => 'EXISTS',
+        ));
+        $touched = 0;
+        foreach ((array) $ids as $post_id) {
+            $status = self::get_json($post_id, self::META_RELAYS);
+            if (!is_array($status) || empty($status['relays'][$url])) {
+                continue;
+            }
+            unset($status['relays'][$url]);
+            $status = self::reschedule($post_id, $status);
+            self::put_json($post_id, self::META_RELAYS, $status);
+            $touched++;
+        }
+        return $touched;
+    }
+
     /* ---------------------------------------------------------------------
      * Log
      * ------------------------------------------------------------------ */

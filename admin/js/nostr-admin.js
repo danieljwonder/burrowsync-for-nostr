@@ -656,6 +656,18 @@
             });
         });
         
+        // Relay health: forget a relay that is no longer in the list
+        $(document).on('click', '.nostr-forget-relay', function() {
+            var btn = $(this);
+            var relay = btn.data('relay');
+            if (!confirm('Forget ' + relay + '?\n\nIts results are removed from every post and it will not be retried. Signed events are kept.')) { return; }
+            btn.prop('disabled', true).text('Forgetting...');
+            $.post(ajaxurl, { action: 'nostr_forget_relay', relay: relay, nonce: nostrForWPAdmin.nonce }).done(function(r) {
+                if (r.success) { showMessage(r.data.message, 'success'); btn.closest('tr').fadeOut(300, function() { $(this).remove(); }); }
+                else { showMessage(r.data || 'Could not forget relay', 'error'); btn.prop('disabled', false).text('Forget'); }
+            }).fail(function() { showMessage('Request failed', 'error'); btn.prop('disabled', false).text('Forget'); });
+        });
+
         // Test all relays
         $('#nostr-test-all-relays').on('click', function() {
             var button = $(this);

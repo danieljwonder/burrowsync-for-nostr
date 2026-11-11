@@ -24,6 +24,7 @@ class Nostr_Publish_Record_Admin {
     private function __construct() {
         add_action('admin_post_' . self::DOWNLOAD_ACTION, array($this, 'download_signed_event'));
         add_action('nostr_for_wp_settings_cards', array($this, 'render_relay_health_card'), 30);
+        add_action('wp_ajax_nostr_forget_relay', array($this, 'forget_relay_ajax'));
     }
 
     /**
@@ -61,6 +62,7 @@ class Nostr_Publish_Record_Admin {
                                     <code><?php echo esc_html($url); ?></code>
                                     <?php if (!$h['in_list']): ?>
                                         <br><small><?php esc_html_e('(no longer in your relay list)', 'burrowsync-for-nostr'); ?></small>
+                                        <button type="button" class="button button-small nostr-forget-relay" data-relay="<?php echo esc_attr($url); ?>" style="margin-left:6px;"><?php esc_html_e('Forget', 'burrowsync-for-nostr'); ?></button>
                                     <?php endif; ?>
                                 </td>
                                 <td><?php echo esc_html(number_format_i18n($h['accepted'])); ?></td>
@@ -89,6 +91,29 @@ class Nostr_Publish_Record_Admin {
             <?php endif; ?>
         </div>
         <?php
+    }
+
+    /**
+     * Remove a dropped relay's rows from every post (health card "Forget").
+     */
+    public function forget_relay_ajax() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        $relay = isset($_POST['relay']) ? sanitize_text_field(wp_unslash($_POST['relay'])) : '';
+        $n = Nostr_Publish_Record::forget_relay($relay);
+        if ($n === false) {
+            wp_send_json_error(__('That relay is still in your relay list. Remove it there first.', 'burrowsync-for-nostr'));
+        }
+        wp_send_json_success(array(
+            'touched' => $n,
+            'message' => sprintf(
+                /* translators: %d: number of posts */
+                _n('Forgotten on %d post.', 'Forgotten on %d posts.', $n, 'burrowsync-for-nostr'),
+                $n
+            ),
+        ));
     }
 
     /**

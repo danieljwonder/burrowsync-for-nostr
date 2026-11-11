@@ -4,7 +4,7 @@ Tags: nostr, sync, social, notes, burrowsync
 Requires at least: 5.9
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.9.2
+Stable tag: 0.9.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -144,6 +144,9 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 
 == Changelog ==
 
+= 0.9.3 =
+* Relay health: a Forget button on relays that are no longer in your list removes their results from every post so they stop appearing and are never retried. Signed events are kept
+
 = 0.9.2 =
 * Compatibility: the WebSocket handshake now includes a User-Agent and site Origin. This may help relays that reject bare handshakes; resolution of nostr.wine HTTP 403 is not yet live-verified.
 * New: load your relay configuration from your Nostr relay list (NIP-65, kind 10002), and optionally publish changes back to it when you save. Read-only relays in your Nostr list are kept; if the list changed in another app since the page loaded, publishing is refused with a diff rather than overwriting it
@@ -210,6 +213,9 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 * Admin interface for settings and management
 
 == Upgrade Notice ==
+
+= 0.9.3 =
+Small update: Forget button for dropped relays in Relay health.
 
 = 0.9.2 =
 Adds NIP-65 relay-list import and optional publishing, real WebSocket relay tests, and handshake headers. Existing settings are retained. Paid-relay HTTP 403 resolution still requires live verification.
