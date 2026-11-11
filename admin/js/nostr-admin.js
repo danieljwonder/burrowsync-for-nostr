@@ -77,6 +77,17 @@
                 nonce: nostrForWPAdmin.nonce
             });
         },
+
+        // NIP-65 relay list: fetch from Nostr, publish via bunker, broadcast browser-signed
+        fetchRelayList: function() {
+            return $.post(ajaxurl, { action: 'nostr_relay_list_fetch', nonce: nostrForWPAdmin.nonce });
+        },
+        publishRelayList: function(expectedId) {
+            return $.post(ajaxurl, { action: 'nostr_relay_list_publish', expected_id: expectedId, nonce: nostrForWPAdmin.nonce });
+        },
+        broadcastRelayList: function(signedEvent) {
+            return $.post(ajaxurl, { action: 'nostr_relay_list_broadcast', event: JSON.stringify(signedEvent), nonce: nostrForWPAdmin.nonce });
+        },
         
         // Force sync - handles both outbound (WordPress → Nostr) and inbound (Nostr → WordPress)
         forceSync: function() {
@@ -322,10 +333,12 @@
         
         nostrForWP.testRelay(relayUrl).done(function(response) {
             console.log('Relay test response:', response);
+            var msg = (response && response.data && response.data.message) ? String(response.data.message) : '';
             if (response.success && response.data.success) {
-                statusSpan.html('<span class="dashicons dashicons-yes-alt" style="color: green;" title="Basic TCP connectivity to relay host/port successful"></span>');
+                statusSpan.html('<span class="dashicons dashicons-yes-alt" style="color: green;"></span>').attr('title', msg || 'Relay answered');
             } else {
-                statusSpan.html('<span style="color: red;" title="TCP connection test failed - relay may be down or unreachable"></span>');
+                statusSpan.html('<span class="dashicons dashicons-dismiss" style="color: #b32d2e;"></span> <span style="color:#b32d2e;font-size:12px;"></span>');
+                statusSpan.find('span:last').text(msg || 'Relay did not answer');
             }
         }).fail(function(xhr, status, error) {
             console.log('Relay test failed:', xhr, status, error);
@@ -432,6 +445,50 @@
             button.prop('disabled', false).text(nostrForWPAdmin.strings.test);
         });
         
+        // NIP-65: remember the relay list event the page loaded, for the stale check
+        var relayListLoadedId = null;
+        function relayListStatus(text, ok) {
+            $('#nostr-relay-list-status').text(text).css('color', ok === false ? '#b32d2e' : (ok ? 'green' : ''));
+        }
+        $('#nostr-relay-list-import').on('click', function() {
+            var button = $(this).prop('disabled', true);
+            relayListStatus('Looking up your relay list on Nostr...');
+            nostrForWP.fetchRelayList().done(function(r) {
+                if (!r.success) { relayListStatus(r.data || 'Lookup failed', false); return; }
+                if (!r.data.found) { relayListStatus('No relay list (kind 10002) found for your key yet. Save with the checkbox ticked to publish one.', false); return; }
+                relayListLoadedId = r.data.event_id;
+                var list = r.data.write.slice();
+                var readOnly = r.data.read || [];
+                if (!confirm('Replace the relays below with the ' + list.length + ' write relays from your Nostr relay list?\n\n' + list.join('\n') + (readOnly.length ? '\n\nRead-only (kept on Nostr, not added here):\n' + readOnly.join('\n') : ''))) { relayListStatus(''); return; }
+                $('#nostr-relays-list').empty();
+                list.forEach(function(u) { $('#nostr-relays-list').append(addRelayItem(u)); });
+                relayListStatus('Loaded ' + list.length + ' relays from your Nostr relay list (published ' + new Date(r.data.created_at * 1000).toLocaleString() + '). Click Save Relays to keep them.', true);
+            }).fail(function() { relayListStatus('Lookup failed', false); }).always(function() { button.prop('disabled', false); });
+        });
+
+        function publishRelayListAfterSave() {
+            relayListStatus('Publishing your relay list to Nostr...');
+            var expected = relayListLoadedId === null ? '' : relayListLoadedId;
+            return nostrForWP.publishRelayList(expected).done(function(r) {
+                if (r.success) { relayListStatus(r.data.message, true); return; }
+                var d = r.data || {};
+                if (d.needs_browser_signer && d.unsigned) {
+                    if (!nostrForWP.isExtensionAvailable()) { relayListStatus('Saved here, but no signer available to publish the relay list (no bunker, no browser extension).', false); return; }
+                    return window.nostr.signEvent(d.unsigned).then(function(signed) {
+                        return nostrForWP.broadcastRelayList(signed).done(function(b) {
+                            relayListStatus(b.success ? b.data.message : ((b.data && b.data.message) || 'Broadcast failed'), !!b.success);
+                        });
+                    }).catch(function(e) { relayListStatus('Signing failed: ' + e, false); });
+                }
+                if (d.stale) {
+                    var diff = d.diff || {added: [], removed: []};
+                    relayListStatus(d.message + (diff.added.length ? ' Added elsewhere: ' + diff.added.join(', ') + '.' : '') + (diff.removed.length ? ' Removed elsewhere: ' + diff.removed.join(', ') + '.' : ''), false);
+                    return;
+                }
+                relayListStatus(d.message || 'Publishing the relay list failed', false);
+            }).fail(function() { relayListStatus('Publishing the relay list failed', false); });
+        }
+
         $('#nostr-save-relays').on('click', function() {
             var button = $(this);
             var relays = [];
@@ -460,10 +517,20 @@
                 console.log('Relay save response:', response);
                 if (response.success) {
                     showMessage(nostrForWPAdmin.strings.relaysSaved || 'Relays saved successfully', 'success');
-                    // Refresh the page after a short delay to show the saved relays
-                    setTimeout(function() {
-                        location.reload();
-                    }, 1500);
+                    var after = function() { setTimeout(function() { location.reload(); }, 2500); };
+                    if ($('#nostr-relay-list-publish').is(':checked')) {
+                        // Stale check: if the page never loaded the Nostr list, fetch it now
+                        // so we know what we would be overwriting.
+                        var go = function() { $.when(publishRelayListAfterSave()).always(after); };
+                        if (relayListLoadedId === null) {
+                            nostrForWP.fetchRelayList().done(function(r) {
+                                relayListLoadedId = (r.success && r.data.found) ? r.data.event_id : '';
+                                go();
+                            }).fail(go);
+                        } else { go(); }
+                    } else {
+                        after();
+                    }
                 } else {
                     showMessage((nostrForWPAdmin.strings.relaysSaveFailed || 'Failed to save relays') + ': ' + (response.data || nostrForWPAdmin.strings.unknownError || 'Unknown error'), 'error');
                 }

@@ -105,14 +105,22 @@ class Nostr_WebSocket_Client {
     private function perform_handshake($host, $path) {
         $key = base64_encode(random_bytes(16));
         
+        // Some relays (nostr.wine for one) answer 403 to a bare handshake and
+        // expect a client to identify itself, so send the site as the origin.
+        $site = function_exists('home_url') ? home_url() : '';
+        $version = defined('NOSTR_FOR_WP_VERSION') ? NOSTR_FOR_WP_VERSION : 'dev';
         $headers = [
             "GET {$path} HTTP/1.1",
             "Host: {$host}",
             "Upgrade: websocket",
             "Connection: Upgrade",
             "Sec-WebSocket-Key: {$key}",
-            "Sec-WebSocket-Version: 13"
+            "Sec-WebSocket-Version: 13",
+            "User-Agent: Mozilla/5.0 (compatible; BurrowSync for Nostr/{$version}; +https://burrowsync.com)",
         ];
+        if ($site !== '') {
+            $headers[] = "Origin: {$site}";
+        }
         
         $request = implode("\r\n", $headers) . "\r\n\r\n";
         

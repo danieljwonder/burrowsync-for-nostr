@@ -42,6 +42,9 @@ class Nostr_Admin_Settings {
         add_action('wp_ajax_nostr_disconnect', array($this, 'disconnect_ajax'));
         add_action('wp_ajax_nostr_test_relay', array($this, 'test_relay_ajax'));
         add_action('wp_ajax_nostr_save_relays', array($this, 'save_relays_ajax'));
+        add_action('wp_ajax_nostr_relay_list_fetch', array($this, 'relay_list_fetch_ajax'));
+        add_action('wp_ajax_nostr_relay_list_publish', array($this, 'relay_list_publish_ajax'));
+        add_action('wp_ajax_nostr_relay_list_broadcast', array($this, 'relay_list_broadcast_ajax'));
         add_action('wp_ajax_nostr_force_sync', array($this, 'force_sync_ajax'));
         add_action('wp_ajax_nostr_get_pending_posts', array($this, 'get_pending_posts_ajax'));
         add_action('wp_ajax_nostr_get_post_event', array($this, 'get_post_event_ajax'));
@@ -149,7 +152,7 @@ class Nostr_Admin_Settings {
                 <!-- Relay Configuration -->
                 <div class="nostr-card">
                     <h2><?php _e('Relay Configuration', 'burrowsync-for-nostr'); ?></h2>
-                    <p class="description"><?php _e('Configure your Nostr relays. The test button checks basic connectivity to the relay host/port.', 'burrowsync-for-nostr'); ?></p>
+                    <p class="description"><?php _e('Configure the relays this site publishes to and reads from. You can load the list from your Nostr profile, and publish changes back to it.', 'burrowsync-for-nostr'); ?></p>
                     
                     <form id="nostr-relays-form">
                         <table class="form-table">
@@ -171,9 +174,15 @@ class Nostr_Admin_Settings {
                                         <?php endforeach; ?>
                                     </div>
                                     <button type="button" class="button" id="nostr-add-relay"><?php _e('Add Relay', 'burrowsync-for-nostr'); ?></button>
+                                    <button type="button" class="button" id="nostr-relay-list-import"><?php _e('Load from my Nostr relay list', 'burrowsync-for-nostr'); ?></button>
                                     <button type="button" class="button button-primary" id="nostr-save-relays"><?php _e('Save Relays', 'burrowsync-for-nostr'); ?></button>
+                                    <p style="margin-top:10px;">
+                                        <label><input type="checkbox" id="nostr-relay-list-publish" />
+                                            <?php _e('Also update my Nostr relay list (NIP-65) when I save', 'burrowsync-for-nostr'); ?></label>
+                                    </p>
+                                    <div id="nostr-relay-list-status" class="description" style="margin-top:6px;"></div>
                                     <p class="description" style="margin-top: 10px; font-style: italic;">
-                                        <?php _e('Note: The test checks basic TCP connectivity to the relay host/port. Real WebSocket connections will be tested during actual sync operations.', 'burrowsync-for-nostr'); ?>
+                                        <?php _e('Test opens a real connection to the relay and asks for one event. Your Nostr relay list is what other apps use to find your posts; the relays here become read+write entries, and any read-only relays already in your list are kept.', 'burrowsync-for-nostr'); ?>
                                     </p>
                                 </td>
                             </tr>
@@ -572,12 +581,78 @@ class Nostr_Admin_Settings {
         // Log the test attempt
         error_log('Nostr: Testing relay: ' . $relay);
         
-        $nip07_handler = Nostr_NIP07_Handler::get_instance();
-        $success = $nip07_handler->test_relay($relay);
-        
-        error_log('Nostr: Relay test result for ' . $relay . ': ' . ($success ? 'success' : 'failed'));
-        
-        wp_send_json_success(array('success' => $success));
+        // A real WebSocket handshake plus a request, so relays that accept
+        // TCP but refuse the handshake (403) or never answer show as failed.
+        $check = Nostr_Relay_List::check_relay($relay);
+        error_log('Nostr: Relay test result for ' . $relay . ': ' . ($check['ok'] ? 'ok' : 'failed: ' . $check['message']));
+        wp_send_json_success(array('success' => $check['ok'], 'message' => $check['message']));
+    }
+
+    /**
+     * Fetch the site's kind 10002 relay list from Nostr (for import and for
+     * the stale check before publishing).
+     */
+    public function relay_list_fetch_ajax() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        if (!Nostr_Relay_List::site_pubkey()) {
+            wp_send_json_error(__('Connect your Nostr key first (bunker or browser extension).', 'burrowsync-for-nostr'));
+        }
+        $event = Nostr_Relay_List::fetch_current();
+        if (!$event) {
+            wp_send_json_success(array('found' => false, 'event_id' => '', 'write' => array(), 'read' => array()));
+        }
+        $parsed = Nostr_Relay_List::parse($event);
+        wp_send_json_success(array(
+            'found'      => true,
+            'event_id'   => $event['id'],
+            'created_at' => (int) $event['created_at'],
+            'write'      => $parsed['write'],
+            'read'       => array_values(array_diff($parsed['read'], $parsed['write'])),
+        ));
+    }
+
+    /**
+     * Sign (bunker) and broadcast a kind 10002 for the saved WordPress list.
+     * In browser-signing mode this returns the unsigned event for NIP-07.
+     */
+    public function relay_list_publish_ajax() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        $expected = isset($_POST['expected_id']) ? sanitize_text_field(wp_unslash($_POST['expected_id'])) : null;
+        $relays = Nostr_Client::get_instance()->get_user_relays();
+        $result = Nostr_Relay_List::publish($relays, $expected);
+        if (!empty($result['ok'])) {
+            wp_send_json_success($result);
+        }
+        wp_send_json_error($result);
+    }
+
+    /**
+     * Browser-signed kind 10002: verify and broadcast.
+     */
+    public function relay_list_broadcast_ajax() {
+        check_ajax_referer('nostr_for_wp_admin_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions', 'burrowsync-for-nostr'));
+        }
+        $event = isset($_POST['event']) && is_string($_POST['event']) ? json_decode(wp_unslash($_POST['event']), true) : null;
+        if (!is_array($event)) {
+            wp_send_json_error(__('No signed event received.', 'burrowsync-for-nostr'));
+        }
+        $pubkey = Nostr_Relay_List::site_pubkey();
+        if (!$pubkey || !isset($event['pubkey']) || strtolower($event['pubkey']) !== $pubkey) {
+            wp_send_json_error(__('The signed relay list is not from this site\'s key.', 'burrowsync-for-nostr'));
+        }
+        $result = Nostr_Relay_List::broadcast($event);
+        if (!empty($result['ok'])) {
+            wp_send_json_success($result);
+        }
+        wp_send_json_error($result);
     }
     
     /**

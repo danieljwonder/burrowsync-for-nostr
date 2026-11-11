@@ -127,8 +127,11 @@ class Nostr_NIP46_Settings {
         if (self::$instance === null) self::$instance = new self();
         return self::$instance;
     }
-    public function is_bunker_active() { return true; }
-    public function get_signing_method() { return 'nip46'; }
+    public static $active = true;
+    public static $user_pubkey = null;
+    public function is_bunker_active() { return self::$active; }
+    public function get_signing_method() { return self::$active ? 'nip46' : 'nip07'; }
+    public function get_user_pubkey() { return self::$user_pubkey; }
 }
 
 /* Bunker client stub: signs locally with a throwaway key, counts calls. */

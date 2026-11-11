@@ -96,6 +96,7 @@ class Nostr_For_WP {
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-client.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-publish-record.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-relay-retry.php';
+        require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-relay-list.php';
         require_once NOSTR_FOR_WP_PLUGIN_DIR . 'includes/class-nip46-publisher.php';
         
         // Load admin classes

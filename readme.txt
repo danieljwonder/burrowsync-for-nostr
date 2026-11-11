@@ -4,7 +4,7 @@ Tags: nostr, sync, social, notes, burrowsync
 Requires at least: 5.9
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 0.9.1
+Stable tag: 0.9.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -144,6 +144,11 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 
 == Changelog ==
 
+= 0.9.2 =
+* Fixed: relays that refuse a bare WebSocket handshake (nostr.wine answered 403) now accept connections; the plugin identifies itself with a User-Agent and your site as the Origin
+* New: load your relay configuration from your Nostr relay list (NIP-65, kind 10002), and optionally publish changes back to it when you save. Read-only relays in your Nostr list are kept; if the list changed in another app since the page loaded, publishing is refused with a diff rather than overwriting it
+* The relay Test button now opens a real WebSocket connection and asks for an event, instead of only checking the port
+
 = 0.9.1 =
 * First release under the BurrowSync name
 * Fixed: a relay replying OK=false (for example a paid relay refusing the event) was counted as a successful publish
@@ -203,6 +208,9 @@ The plugin includes CSS styling that provides a clean, card-based design for not
 * Admin interface for settings and management
 
 == Upgrade Notice ==
+
+= 0.9.2 =
+Safe update. If a paid relay such as nostr.wine showed "403 Forbidden" in Relay health, it will start accepting your posts on the next retry.
 
 = 0.9.1 =
 Safe update from 0.9.0 and from Nostr for WP 1.4.0. Posts published before this version have no stored signed event, so they cannot be rebroadcast by the new retry sweep; use Backfill to Nostr for any that never reached a relay.
